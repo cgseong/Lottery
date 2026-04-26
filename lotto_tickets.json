@@ -1,0 +1,27 @@
+{
+  "tickets": [
+    {
+      "id": 1,
+      "numbers": [
+        3,
+        12,
+        21,
+        24,
+        39,
+        42
+      ],
+      "purchase_date": "2025-06-22",
+      "purchase_amount": 1000,
+      "prize_amount": 0,
+      "is_checked": false,
+      "winning_rank": null
+    }
+  ],
+  "statistics": {
+    "total_investment": 1000,
+    "total_prize": 0,
+    "total_tickets": 1,
+    "winning_tickets": 0,
+    "roi": 0.0
+  }
+}
