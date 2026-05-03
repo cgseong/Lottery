@@ -5,6 +5,18 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
+# 로또 기본 상수
+_NUM_BALLS = 45
+_PICK = 6
+_RECENT_WINDOW = 30          # 최근 트렌드 분석 회차 수
+_EXPECTED_GAP = _NUM_BALLS / _PICK  # ≈ 7.5 — 각 번호의 기대 출현 간격
+_COLD_PERIOD_MULTIPLIER = 4  # 냉각 번호 기준: 기대 간격의 N배
+_BIRTHDAY_MAX = 31           # 생일 편향 상한 (1~31)
+_PRIZE_HIGH_SCORE = 1.0      # 비생일 구간 (32~45) 상금 배분 점수
+_PRIZE_LOW_SCORE = 0.45      # 생일 구간 상금 배분 점수
+_PRIZE_ROUND_MULT = 0.75     # 5의 배수 심리적 인기 번호 감소 계수
+_PRIZE_LUCKY7_MULT = 0.80    # 행운의 7 배수(≤28) 감소 계수
+
 # 10개 지표별 기본 가중치 (합계 = 1.0)
 _DEFAULT_WEIGHTS: Dict[str, float] = {
     'frequency':            0.10,  # 지표 1: 전체 출현 빈도
@@ -88,7 +100,7 @@ class ComprehensiveAnalyzer:
             for num in row:
                 self._freq[num] += 1
 
-        recent = min(30, n)
+        recent = min(_RECENT_WINDOW, n)
         for row in rows[-recent:]:
             for num in row:
                 self._recent_freq[num] += 1
@@ -129,18 +141,17 @@ class ComprehensiveAnalyzer:
         n = len(self._data_matrix)
         if n == 0:
             return 0.5
-        expected_gap = 45.0 / 6.0  # ≈ 7.5 회차
         last = int(self._last_seen[num])
         gap = (n - 1 - last) if last >= 0 else n
-        return float(min(1.0, gap / (expected_gap * 4)))
+        return float(min(1.0, gap / (_EXPECTED_GAP * _COLD_PERIOD_MULTIPLIER)))
 
     def _ind_prize_sharing(self, num: int) -> float:
         """지표 10: 상금 배분 최적화 — 생일·행운 번호 편향 역보정"""
-        score = 1.0 if num >= 32 else 0.45
+        score = _PRIZE_HIGH_SCORE if num >= _BIRTHDAY_MAX else _PRIZE_LOW_SCORE
         if num % 5 == 0:
-            score *= 0.75  # 5의 배수: 심리적 인기 번호
+            score *= _PRIZE_ROUND_MULT
         if num % 7 == 0 and num <= 28:
-            score *= 0.80  # 행운의 7 배수
+            score *= _PRIZE_LUCKY7_MULT
         return float(min(1.0, score))
 
     # ------------------------------------------------------------------

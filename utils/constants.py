@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-로또 분석 시스템 상수 정의
-"""
+"""로또 분석 시스템 상수 정의"""
 
 # 로또 기본 상수
 MAX_LOTTO_NUMBER = 45
@@ -17,50 +15,40 @@ ROUND_COLUMN = '회차'
 # 파일 경로
 DEFAULT_CSV_FILE = '로또당첨번호.csv'
 DEFAULT_EXCLUDE_FILE = 'exclude_numbers.json'
-DEFAULT_TICKETS_FILE = 'lotto_tickets.json'
-DEFAULT_DNN_MODEL_PATH = 'lotto_dnn_model.keras'
-DEFAULT_DNN_SCALER_PATH = 'lotto_dnn_scaler.pkl'
-DEFAULT_AI_MODELS_PATH = 'ai_pattern_models.pkl'
+DEFAULT_SAVED_FILE = 'saved_numbers.json'
+DEFAULT_AI_MODELS_PATH = 'ai_models.pkl'
 
-# 메뉴 옵션
+# 메뉴 옵션 (main.py 메뉴와 동기화)
 MENU_OPTIONS = {
     'MAIN_MENU': {
-        'RECOMMEND': '1',
-        'EXCLUDE': '2', 
-        'TICKETS': '3',
-        'STATISTICS': '4',
-        'EXCLUDE_RECOMMEND': '5',
-        'DATA_COLLECTION': '6',
-        'DNN_PREDICT': '7',
-        'ENSEMBLE': '8',
-        'AI_PATTERN': '9',
-        'LINE_PATTERN': '10',
-        'SYSTEM_INFO': '11',
-        'EXIT': '0'
+        'ANALYZE': '1',
+        'RECOMMEND': '2',
+        'EXCLUDE': '3',
+        'ADVANCED_RECOMMEND': '4',
+        'SAVED': '5',
+        'AI_PATTERN': '6',
+        'DATA_UPDATE': '7',
+        'COMPREHENSIVE': '8',
+        'EXIT': '0',
     }
 }
 
 # 분석기 타입
 ANALYZER_TYPES = {
     'STATISTICAL': 'statistical',
-    'PATTERN_MATCHING': 'pattern_matching', 
-    'ENSEMBLE': 'ensemble',
-    'MERSENNE_TWISTER': 'mersenne_twister',
-    'TREND': 'trend',
-    'DNN': 'dnn',
+    'COMPREHENSIVE': 'comprehensive',
     'AI_PATTERN': 'ai_pattern',
-    'LINE_PATTERN': 'line_pattern'
 }
 
 # 패턴 타입
 PATTERN_TYPES = {
     'DENSE': '밀집형',
-    'BALANCED': '균형형', 
+    'BALANCED': '균형형',
     'DISPERSED': '분산형',
     'BEND': '꺾임형',
     'ZIGZAG': '지그재그형',
     'COMPLEX': '복합형',
-    'SINGLE': '단일점'
+    'SINGLE': '단일점',
 }
 
 # HTTP 헤더
@@ -77,29 +65,27 @@ DEFAULT_HEADERS = {
 URL_TEMPLATES = {
     'BASE_URL': 'https://dhlottery.co.kr',
     'SEARCH_URL': 'https://dhlottery.co.kr/gameResult.do?method=byWin',
-    'ROUND_URL': 'https://dhlottery.co.kr/gameResult.do?method=byWin&drwNo={}'
-}
-
-# 그리드 설정
-GRID_CONFIG = {
-    'ROWS': 7,
-    'COLS': 7,
-    'LAST_ROW_COLS': 3
+    'ROUND_URL': 'https://dhlottery.co.kr/gameResult.do?method=byWin&drwNo={}',
 }
 
 # AI 모델 설정
 AI_MODEL_CONFIG = {
-    'DEFAULT_CLUSTERS': 5,
-    'DEFAULT_GROUP_SIZE': 5,
-    'DEFAULT_EPOCHS': 100,
-    'DEFAULT_BATCH_SIZE': 32,
-    'DEFAULT_WINDOW_SIZE': 10
+    'WINDOW_SIZE': 5,
+    'FEATURE_DIM': 125,
+    'MAX_ITER': 100,
+    'RANDOM_STATE': 42,
 }
 
-# 점수 가중치
-SCORE_WEIGHTS = {
-    'FREQUENCY': 0.4,
-    'SUM': 0.3,
-    'CONSECUTIVE': 0.2,
-    'PATTERN': 0.1
-} 
+# 기본 점수 가중치
+DEFAULT_SCORE_WEIGHTS = {
+    'frequency': 0.45,
+    'sum': 0.20,
+    'trend': 0.20,
+    'distribution': 0.15,
+}
+
+# 상금 분배 최적화 구간
+PRIZE_SHARING_BIRTHDAY_MAX = 31   # 생일 선택 편향 상한 (1~31)
+PRIZE_SHARING_HIGH_MULT = 1.40    # 비생일 구간 가중치
+PRIZE_SHARING_LOW_MULT = 0.75     # 생일 구간 가중치
+PRIZE_SHARING_ROUND_MULT = 0.85   # 5의 배수 추가 감소

@@ -1,6 +1,4 @@
-"""
-로또 데이터 수집 모듈
-"""
+"""로또 데이터 수집 모듈"""
 
 import csv
 import time
@@ -8,6 +6,13 @@ import os
 import requests
 from bs4 import BeautifulSoup
 import re
+
+try:
+    from utils.logging_config import get_logger
+    _log = get_logger(__name__)
+except ImportError:
+    import logging
+    _log = logging.getLogger(__name__)
 
 
 class LottoDataCollector:
@@ -27,18 +32,21 @@ class LottoDataCollector:
             'Upgrade-Insecure-Requests': '1',
         }
 
-    def _fetch_round_json(self, round_num):
-        """JSON API에서 특정 회차 번호를 조회합니다."""
-        try:
-            url = self.api_url_template.format(int(round_num))
-            response = requests.get(url, headers=self.headers, timeout=3)
-            response.raise_for_status()
-            payload = response.json()
-            if payload.get("returnValue") == "success":
-                return payload
-            return None
-        except Exception:
-            return None
+    def _fetch_round_json(self, round_num, retries: int = 2):
+        """JSON API에서 특정 회차 번호를 조회합니다. 실패 시 retries만큼 재시도합니다."""
+        url = self.api_url_template.format(int(round_num))
+        for attempt in range(retries + 1):
+            try:
+                response = requests.get(url, headers=self.headers, timeout=3)
+                response.raise_for_status()
+                payload = response.json()
+                if payload.get("returnValue") == "success":
+                    return payload
+                return None
+            except Exception:
+                if attempt < retries:
+                    time.sleep(0.5 * (attempt + 1))
+        return None
 
     def get_latest_round(self):
         """최신 회차 정보를 가져옵니다."""
@@ -92,7 +100,7 @@ class LottoDataCollector:
                 if matches:
                     latest_round = max(int(x) for x in matches)
         except Exception as e:
-            print(f" 최신 회차 HTML 조회 실패, API fallback 사용: {e}")
+            _log.warning("최신 회차 HTML 조회 실패, API fallback 사용: %s", e)
 
         # 방법 5: JSON API fallback (HTML 실패/파싱 실패 포함)
         if not latest_round:
@@ -162,7 +170,8 @@ class LottoDataCollector:
 
             except Exception as e:
                 failed_rounds.append(round_num)
-                print(f"(오류: {e})")
+                _log.warning("%d회 수집 오류: %s", round_num, e)
+                print(f"(오류)")
                 time.sleep(1)
 
         print(f"\n 수집 완료: {len(collected_data)}개 성공, {len(failed_rounds)}개 실패")
@@ -253,7 +262,7 @@ class LottoDataCollector:
             return None
 
         except Exception as e:
-            print(f"      번호 추출 오류: {e}")
+            _log.debug("번호 추출 오류: %s", e)
             return None
 
     def _extract_numbers_from_json(self, payload, round_num):
@@ -335,6 +344,7 @@ class LottoDataCollector:
             return True
 
         except Exception as e:
+            _log.error("CSV 파일 저장 실패: %s", e)
             print(f" CSV 파일 저장 실패: {e}")
             return False
 

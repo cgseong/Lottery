@@ -1,26 +1,47 @@
+import hashlib
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
 from sklearn.multioutput import MultiOutputClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
 from typing import List, Optional, Tuple
 import joblib
 import os
 import warnings
+
+try:
+    from utils.logging_config import get_logger
+    _log = get_logger(__name__)
+except ImportError:
+    import logging
+    _log = logging.getLogger(__name__)
 
 # sklearn/pandas 버전 호환성 경고만 억제 (오류는 유지)
 warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 
 class AIPatternLearner:
-    """AI 패턴 학습 및 예측 클래스 (Multi-label & Boosting 기반)"""
-    
-    def __init__(self, data_file='로또당첨번호.csv'):
+    """AI 패턴 학습 및 예측 클래스 (Multi-label & Boosting 기반)
+
+    Args:
+        data_file: 로또 당첨번호 CSV 파일 경로
+        use_pca: True이면 PCA로 125차원 → pca_components 차원으로 축소하여
+                 학습 속도를 높이고 과적합을 줄입니다.
+        pca_components: PCA 축소 후 차원 수 (use_pca=True일 때 사용)
+    """
+
+    def __init__(self, data_file: str = '로또당첨번호.csv',
+                 use_pca: bool = False, pca_components: int = 60):
         self.data_file = data_file
         self.model = None
         self.is_trained = False
         self.window_size = 5
         self.last_seen = None
+        self.use_pca = use_pca
+        self.pca_components = pca_components
+        self._pca: Optional[PCA] = None
         
     def load_data(self) -> Optional[pd.DataFrame]:
         """데이터를 로드하고 시간순(회차 오름차순)으로 정렬합니다."""
@@ -46,7 +67,7 @@ class AIPatternLearner:
                 
             return df
         except Exception as e:
-            print(f"[X] 데이터 로드 오류: {e}")
+            _log.error("데이터 로드 오류: %s", e)
             return None
 
     def prepare_dataset(self, df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -149,17 +170,21 @@ class AIPatternLearner:
         
         # 모델 검증을 위해 9:1로 데이터 분할
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
-        
-        # [모델 적용] LightGBM에서 영향을 받은 sklearn 내장 HistGradientBoostingClassifier 사용
-        # 별도의 xgboost/lightgbm 설치 런타임 오류 방지를 위해 내장 모듈 사용
-        # MultiOutputClassifier로 감싸주어 45개의 출현/미출현 모델을 개별적 혹은 병합하여 평가
+
+        # PCA 차원 축소 (선택)
+        if self.use_pca:
+            n_comp = min(self.pca_components, X_train.shape[1], X_train.shape[0])
+            self._pca = PCA(n_components=n_comp, random_state=42)
+            X_train = self._pca.fit_transform(X_train)
+            print(f"   - PCA 적용: {X.shape[1]}차원 → {n_comp}차원")
+
         print("   - HistGradientBoostingClassifier (LightGBM 호환) 에 MultiOutput 학습 중...")
         try:
             base_estimator = HistGradientBoostingClassifier(max_iter=100, random_state=42)
             self.model = MultiOutputClassifier(base_estimator)
             self.model.fit(X_train, y_train)
         except Exception as e:
-            print(f"[WARN] 내장 Boosting 모델 학습 실패, RandomForest로 대체합니다: {e}")
+            _log.warning("내장 Boosting 모델 학습 실패, RandomForest로 대체합니다: %s", e)
             self.model = RandomForestClassifier(n_estimators=100, random_state=42)
             self.model.fit(X_train, y_train)
         
@@ -225,7 +250,9 @@ class AIPatternLearner:
             return None
             
         X_pred = self._get_current_features(df)
-        
+        if self.use_pca and self._pca is not None:
+            X_pred = self._pca.transform(X_pred)
+
         try:
             # 예측 확률 리스트 가져오기 (각 번호 1~45에 대해 1이 나올 확률을 추적)
             proba_list = self.model.predict_proba(X_pred)
@@ -244,7 +271,7 @@ class AIPatternLearner:
             return predicted_numbers
             
         except Exception as e:
-            print(f"[WARN] 예측 계산 중 오류: {e}")
+            _log.warning("예측 계산 중 오류: %s", e)
             return None
 
     def calculate_combination_probability(self, combinations: List[List[int]]) -> List[float]:
@@ -258,7 +285,9 @@ class AIPatternLearner:
             return [0.0] * len(combinations)
 
         X_pred = self._get_current_features(df)
-        
+        if self.use_pca and self._pca is not None:
+            X_pred = self._pca.transform(X_pred)
+
         try:
             proba_list = self.model.predict_proba(X_pred)
             number_probs = {}
@@ -267,7 +296,7 @@ class AIPatternLearner:
                 number_probs[i + 1] = prob
                 
         except Exception as e:
-            print(f"[WARN] 확률 계산 오류: {e}")
+            _log.warning("확률 계산 오류: %s", e)
             return [0.0] * len(combinations)
 
         scores = []
@@ -295,21 +324,44 @@ class AIPatternLearner:
             
         return scores
 
+    @staticmethod
+    def _hash_file(path: str) -> str:
+        h = hashlib.sha256()
+        with open(path, 'rb') as f:
+            for chunk in iter(lambda: f.read(65536), b''):
+                h.update(chunk)
+        return h.hexdigest()
+
     def save_models(self, filename: str = 'ai_models.pkl') -> None:
-        """학습된 모델과 파생 피처(last_seen) 상태를 덤프합니다."""
+        """학습된 모델과 파생 피처(last_seen), PCA 상태를 저장하고 SHA256 해시를 기록합니다."""
         if self.is_trained:
-            joblib.dump((self.model, getattr(self, 'last_seen', None)), filename)
+            joblib.dump((self.model, getattr(self, 'last_seen', None), self._pca), filename)
+            digest = self._hash_file(filename)
+            with open(filename + '.sha256', 'w') as f:
+                f.write(digest)
             print(f" 모델 저장 완료: {filename}")
 
     def load_models(self, filename: str = 'ai_models.pkl') -> bool:
-        """저장된 모델 상태를 불러옵니다."""
-        if os.path.exists(filename):
-            data = joblib.load(filename)
-            if isinstance(data, tuple) and len(data) == 2:
-                self.model, self.last_seen = data
-            else:
-                self.model = data
-            self.is_trained = True
-            print(f" 모델 로드 완료: {filename}")
-            return True
-        return False
+        """저장된 모델 상태를 불러옵니다. SHA256 해시로 무결성을 검증합니다."""
+        if not os.path.exists(filename):
+            return False
+        hash_file = filename + '.sha256'
+        if os.path.exists(hash_file):
+            with open(hash_file, 'r') as f:
+                expected = f.read().strip()
+            actual = self._hash_file(filename)
+            if actual != expected:
+                print(f"[WARN] 모델 파일 무결성 검증 실패: {filename}. 재학습이 필요합니다.")
+                _log.warning("모델 파일 무결성 검증 실패: %s", filename)
+                return False
+        data = joblib.load(filename)
+        if isinstance(data, tuple) and len(data) == 3:
+            self.model, self.last_seen, self._pca = data
+        elif isinstance(data, tuple) and len(data) == 2:
+            self.model, self.last_seen = data
+        else:
+            self.model = data
+        self.use_pca = self._pca is not None
+        self.is_trained = True
+        print(f" 모델 로드 완료: {filename}")
+        return True

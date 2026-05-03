@@ -8,6 +8,7 @@ from .constants import *
 from .helpers import *
 from .system_utils import check_installation_status, show_system_info
 from .file_utils import resolve_data_file, DEFAULT_DATA_FILE
+from .logging_config import get_logger
 
 __all__ = [
     'LOTTO_NUMBER_COLUMNS',
@@ -19,5 +20,6 @@ __all__ = [
     'check_installation_status',
     'show_system_info',
     'resolve_data_file',
-    'DEFAULT_DATA_FILE'
-] 
+    'DEFAULT_DATA_FILE',
+    'get_logger',
+]

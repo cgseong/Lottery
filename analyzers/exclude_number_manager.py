@@ -1,9 +1,16 @@
-"""
-제외번호 관리 모듈
-"""
+"""제외번호 관리 모듈"""
 
 import json
+import os
+import tempfile
 from datetime import datetime
+
+try:
+    from utils.logging_config import get_logger
+    _log = get_logger(__name__)
+except ImportError:
+    import logging
+    _log = logging.getLogger(__name__)
 
 
 class ExcludeNumberManager:
@@ -28,19 +35,32 @@ class ExcludeNumberManager:
             print(f" 제외번호 불러오기 실패: {e}")
             self.exclude_numbers = set()
 
-    def save_exclude_numbers(self):
-        """제외번호를 파일에 저장합니다."""
+    def save_exclude_numbers(self) -> bool:
+        """제외번호를 원자적으로 저장합니다 (임시 파일 → rename)."""
+        data = {
+            'exclude_numbers': sorted(list(self.exclude_numbers)),
+            'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        }
+        dir_name = os.path.dirname(os.path.abspath(self.filename)) or '.'
+        tmp_path = None
         try:
-            data = {
-                'exclude_numbers': sorted(list(self.exclude_numbers)),
-                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }
-            with open(self.filename, 'w', encoding='utf-8') as file:
-                json.dump(data, file, ensure_ascii=False, indent=2)
+            with tempfile.NamedTemporaryFile(
+                mode='w', encoding='utf-8', dir=dir_name,
+                suffix='.tmp', delete=False
+            ) as tmp:
+                json.dump(data, tmp, ensure_ascii=False, indent=2)
+                tmp_path = tmp.name
+            os.replace(tmp_path, self.filename)
             print(f" 제외번호 {len(self.exclude_numbers)}개가 저장되었습니다.")
             return True
-        except Exception as e:
+        except OSError as e:
+            _log.error("제외번호 저장 실패: %s", e)
             print(f" 제외번호 저장 실패: {e}")
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
             return False
 
     def add_exclude_numbers(self, numbers):

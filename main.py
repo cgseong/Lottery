@@ -232,19 +232,34 @@ class LottoSystem:
             elif sub_choice == '2':
                 nums = input("추가할 번호 (쉼표 구분): ")
                 try:
-                    num_list = [int(n.strip()) for n in nums.split(',')]
-                    self.exclude_manager.add_exclude_numbers(num_list)
+                    raw_list = [int(n.strip()) for n in nums.split(',') if n.strip()]
+                    if not raw_list:
+                        print("번호를 입력해주세요.")
+                        continue
+                    invalid = [n for n in raw_list if not (1 <= n <= 45)]
+                    if invalid:
+                        print(f"유효하지 않은 번호: {invalid}  (1~45 사이만 허용)")
+                        continue
+                    self.exclude_manager.add_exclude_numbers(raw_list)
                 except ValueError:
-                    print("올바른 번호를 입력해주세요. (1~45 사이)")
+                    print("숫자만 입력해주세요. (예: 3, 7, 15)")
             elif sub_choice == '3':
                 nums = input("삭제할 번호 (쉼표 구분): ")
                 try:
-                    num_list = [int(n.strip()) for n in nums.split(',')]
-                    self.exclude_manager.remove_exclude_numbers(num_list)
+                    raw_list = [int(n.strip()) for n in nums.split(',') if n.strip()]
+                    if not raw_list:
+                        print("번호를 입력해주세요.")
+                        continue
+                    invalid = [n for n in raw_list if not (1 <= n <= 45)]
+                    if invalid:
+                        print(f"유효하지 않은 번호: {invalid}  (1~45 사이만 허용)")
+                        continue
+                    self.exclude_manager.remove_exclude_numbers(raw_list)
                 except ValueError:
-                    print("올바른 숫자를 입력해주세요.")
+                    print("숫자만 입력해주세요. (예: 3, 7, 15)")
             elif sub_choice == '4':
-                self.exclude_manager.clear_exclude_numbers()
+                if input("제외번호를 모두 초기화하시겠습니까? (y/n): ").lower() == 'y':
+                    self.exclude_manager.clear_exclude_numbers()
             elif sub_choice == '0':
                 break
 
@@ -291,7 +306,11 @@ class LottoSystem:
                     print("숫자를 입력해주세요.")
 
         print(f"\n    고정번호: {len(fixed_nums)}개 {list(fixed_nums)}")
-        count = int(input("\n추천받을 조합 개수: ") or "5")
+        try:
+            count = int(input("\n추천받을 조합 개수 (1~20): ").strip() or "5")
+            count = max(1, min(20, count))
+        except ValueError:
+            count = 5
         recommendations = self.stat_analyzer.generate_recommendations(
             exclude_numbers=set(exclude_nums),
             fixed_numbers=fixed_nums,
