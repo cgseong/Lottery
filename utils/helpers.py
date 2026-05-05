@@ -13,19 +13,18 @@ from datetime import datetime
 from .constants import *
 
 
-def check_installation_status() -> Tuple[bool, bool, bool, bool]:
+def check_installation_status() -> Tuple[bool, bool]:
     """필요한 패키지들의 설치 상태를 확인합니다."""
     print("[CHECK] 패키지 설치 상태 확인 중...")
     print("=" * 50)
-    
-    # 기본 패키지들
+
+    # 표준 라이브러리
     basic_packages = {
         'csv': 'CSV 파일 처리',
         'random': '랜덤 번호 생성',
         'collections': '데이터 구조',
-        'datetime': '날짜/시간 처리'
+        'datetime': '날짜/시간 처리',
     }
-    
     print(" 기본 패키지:")
     basic_available = True
     for package, description in basic_packages.items():
@@ -35,98 +34,51 @@ def check_installation_status() -> Tuple[bool, bool, bool, bool]:
         except ImportError:
             print(f"    {package}: {description} (설치 필요)")
             basic_available = False
-    
-    # DNN 관련 패키지들
-    dnn_packages = {
-        'tensorflow': '딥러닝 프레임워크',
-        'numpy': '수치 계산 라이브러리',
-        'sklearn': '머신러닝 라이브러리'
-    }
-    
-    print("\n DNN 패키지:")
-    dnn_available = True
-    for package, description in dnn_packages.items():
-        try:
-            __import__(package)
-            print(f"    {package}: {description}")
-        except ImportError:
-            print(f"    {package}: {description} (설치 필요)")
-            dnn_available = False
-    
-    # AI 패턴 학습 관련 패키지들
-    ai_pattern_packages = {
+
+    # 외부 의존성
+    ext_packages = {
         'sklearn': '머신러닝 라이브러리',
-        'pandas': '데이터 분석 라이브러리',
         'numpy': '수치 계산 라이브러리',
-        'joblib': '병렬 처리 라이브러리'
+        'joblib': '병렬 처리 라이브러리',
+        'requests': 'HTTP 요청 라이브러리',
+        'bs4': 'HTML 파싱 라이브러리',
+        'matplotlib': '그래프 시각화 라이브러리',
     }
-    
-    print("\n AI 패턴 학습 패키지:")
-    ai_pattern_available = True
-    for package, description in ai_pattern_packages.items():
+    print("\n 외부 패키지:")
+    ext_available = True
+    for package, description in ext_packages.items():
         try:
             __import__(package)
             print(f"    {package}: {description}")
         except ImportError:
             print(f"    {package}: {description} (설치 필요)")
-            ai_pattern_available = False
-    
-    # 선 연결 패턴 분석 관련 패키지들
-    line_pattern_packages = {
-        'matplotlib': '그래프 및 시각화 라이브러리'
-    }
-    
-    print("\n 선 연결 패턴 분석 패키지:")
-    line_pattern_available = True
-    for package, description in line_pattern_packages.items():
-        try:
-            __import__(package)
-            print(f"    {package}: {description}")
-        except ImportError:
-            print(f"    {package}: {description} (설치 필요)")
-            line_pattern_available = False
-    
-    print("\n 설치 가이드:")
-    if not basic_available or not dnn_available or not ai_pattern_available or not line_pattern_available:
-        print("   모든 패키지 설치:")
-        print("   pip install -r requirements.txt")
-        if not dnn_available:
-            print("   DNN 패키지: pip install tensorflow numpy scikit-learn")
-        if not ai_pattern_available:
-            print("   AI 패턴 학습 패키지: pip install scikit-learn pandas numpy joblib")
-        if not line_pattern_available:
-            print("   선 연결 패턴 분석 패키지: pip install matplotlib")
+            ext_available = False
+
+    if not basic_available or not ext_available:
+        print("\n 설치 가이드: pip install -r requirements.txt")
     else:
-        print("    모든 패키지가 설치되어 있습니다!")
-    
+        print("\n    모든 패키지가 설치되어 있습니다!")
+
     print("=" * 50)
-    return basic_available, dnn_available, ai_pattern_available, line_pattern_available
+    return basic_available, ext_available
 
 
 def show_system_info():
     """시스템 정보를 표시합니다."""
     print("\n 시스템 정보")
     print("=" * 50)
-    
-    # Python 버전
-    print(f" Python 버전: {sys.version}")
-    
-    # 운영체제 정보
+
     import platform
+    print(f" Python 버전: {sys.version}")
     print(f" 운영체제: {platform.system()} {platform.release()}")
-    
-    # 현재 작업 디렉토리
     print(f" 작업 디렉토리: {os.getcwd()}")
-    
-    # 파일 존재 여부 확인
+
     files_to_check = [
         DEFAULT_CSV_FILE,
         DEFAULT_EXCLUDE_FILE,
-        DEFAULT_TICKETS_FILE,
-        DEFAULT_DNN_MODEL_PATH,
-        DEFAULT_AI_MODELS_PATH
+        DEFAULT_SAVED_FILE,
+        DEFAULT_AI_MODELS_PATH,
     ]
-    
     print("\n 파일 상태:")
     for file_path in files_to_check:
         if os.path.exists(file_path):
@@ -134,8 +86,9 @@ def show_system_info():
             print(f"    {file_path} ({file_size:,} bytes)")
         else:
             print(f"    {file_path} (없음)")
-    
+
     print("=" * 50)
+
 
 
 def validate_numbers(numbers: List[int]) -> bool:
@@ -291,4 +244,42 @@ def extract_numbers_from_data(data: Dict) -> List[int]:
                 numbers.append(int(data[key]))
             except (ValueError, TypeError):
                 continue
-    return sorted(numbers) 
+    return sorted(numbers)
+
+
+def check_consecutive_count(numbers: List[int]) -> int:
+    """번호 목록에서 연속 쌍(인접 번호 쌍)의 총 개수를 반환합니다.
+
+    예: [1, 2, 5, 6, 7] → 3쌍  ((1,2), (5,6), (6,7))
+    예: [3, 7, 12, 33, 40, 45] → 0쌍
+
+    이 함수는 프로젝트 전반에서 공유되는 단일 구현입니다.
+    각 분석기 클래스의 check_consecutive_numbers()는 이 함수에 위임합니다.
+    """
+    if len(numbers) < 2:
+        return 0
+    sorted_nums = sorted(numbers)
+    return sum(1 for a, b in zip(sorted_nums, sorted_nums[1:]) if b - a == 1)
+
+
+def normalize_exclude_numbers(exclude_numbers) -> Set[int]:
+    """제외번호를 set[int]로 정규화합니다.
+
+    dict, list, set, None 등 다양한 입력 형식을 일관된 집합으로 변환합니다.
+    dict인 경우 키만 추출합니다 (키가 번호 번호라고 가정).
+
+    Examples:
+        >>> normalize_exclude_numbers(None)
+        set()
+        >>> normalize_exclude_numbers({1, 2, 3})
+        {1, 2, 3}
+        >>> normalize_exclude_numbers({1: 'a', 5: 'b'})
+        {1, 5}
+        >>> normalize_exclude_numbers([3, 7, 12])
+        {3, 7, 12}
+    """
+    if not exclude_numbers:
+        return set()
+    if isinstance(exclude_numbers, dict):
+        return set(exclude_numbers.keys())
+    return set(exclude_numbers)

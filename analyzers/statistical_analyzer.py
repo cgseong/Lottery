@@ -6,6 +6,11 @@ import random
 from collections import Counter
 from typing import List, Dict, Optional, Set, Tuple
 
+from utils.helpers import check_consecutive_count
+from utils.logging_config import get_logger
+
+_log = get_logger(__name__)
+
 # 상수 정의
 MAX_LOTTO_NUMBER = 45
 NUM_LOTTO_NUMBERS_TO_PICK = 6
@@ -408,18 +413,11 @@ class StatisticalAnalyzer:
         )
 
     def check_consecutive_numbers(self, numbers: List[int]) -> int:
-        """연속된 번호의 개수를 셉니다."""
-        if len(numbers) < 2:
-            return 0
+        """연속된 번호 쌍의 총 개수를 반환합니다.
 
-        sorted_numbers = sorted(numbers)
-        consecutive_count = 0
-
-        for i in range(len(sorted_numbers) - 1):
-            if sorted_numbers[i+1] - sorted_numbers[i] == 1:
-                consecutive_count += 1
-
-        return consecutive_count
+        utils.helpers.check_consecutive_count에 위임 — 단일 구현 유지.
+        """
+        return check_consecutive_count(numbers)
 
     def generate_recommendations(self, exclude_numbers: Optional[Set[int]] = None,
                                  fixed_numbers: Optional[Set[int]] = None,
@@ -447,16 +445,16 @@ class StatisticalAnalyzer:
         # 고정수와 제외수가 겹치면 고정수 우선
         if fixed_numbers & exclude_numbers:
             if verbose:
-                print("[WARN] 고정수와 제외수에 중복된 번호가 있어, 고정수를 우선 적용합니다.")
+                _log.warning("고정수와 제외수에 중복된 번호가 있어, 고정수를 우선 적용합니다.")
             exclude_numbers = exclude_numbers - fixed_numbers
 
         if len(fixed_numbers) > NUM_LOTTO_NUMBERS_TO_PICK:
             if verbose:
-                print("[WARN] 고정수가 6개를 초과합니다. 6개까지만 사용합니다.")
+                _log.warning("고정수가 6개를 초과합니다. 6개까지만 사용합니다.")
             fixed_numbers = set(list(fixed_numbers)[:NUM_LOTTO_NUMBERS_TO_PICK])
 
         if verbose:
-            print("\n[INFO] 통계 기반 분석 실행 중..")
+            _log.info("통계 기반 분석 실행 중..")
 
         recommendations = []
         attempts = 0
@@ -513,7 +511,7 @@ class StatisticalAnalyzer:
             if nums:
                 historical_combinations.add(tuple(sorted(nums)))
 
-        print(f"\n[CHECK] 과거 {len(historical_combinations)}개의 당첨 패턴과 비교합니다..")
+        _log.info("과거 %d개의 당첨 패턴과 비교합니다..", len(historical_combinations))
 
         recommendations = []
         attempts = 0
@@ -522,7 +520,7 @@ class StatisticalAnalyzer:
         available_numbers = [n for n in range(1, MAX_LOTTO_NUMBER + 1) if n not in exclude_numbers]
 
         if len(available_numbers) < NUM_LOTTO_NUMBERS_TO_PICK:
-            print("[WARN] 사용 가능한 번호가 부족합니다.")
+            _log.warning("사용 가능한 번호가 부족합니다.")
             return []
 
         while len(recommendations) < num_recommendations and attempts < max_attempts:

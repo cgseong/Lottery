@@ -8,6 +8,11 @@ import random
 import math
 from typing import List, Dict, Optional, Tuple, Any
 
+from utils.constants import MAX_LOTTO_NUMBER, NUM_LOTTO_NUMBERS_TO_PICK
+from utils.logging_config import get_logger
+
+_log = get_logger(__name__)
+
 # matplotlib 관련 import
 try:
     import matplotlib.pyplot as plt
@@ -100,18 +105,17 @@ class LinePatternAnalyzer:
     def analyze_line_patterns(self, recent_rounds=20):
         """최근 회차들의 선 연결 패턴을 분석합니다."""
         if not LINE_PATTERN_AVAILABLE:
-            print(" matplotlib이 설치되지 않아 선 패턴 분석을 사용할 수 없습니다.")
+            _log.warning("matplotlib이 설치되지 않아 선 패턴 분석을 사용할 수 없습니다.")
             return
-        
-        print(f"\n 선 연결 패턴 분석 (최근 {recent_rounds}회)")
-        print("=" * 60)
-        
+
+        _log.info("선 연결 패턴 분석 (최근 %d회)", recent_rounds)
+
         # 데이터 확인
         if not self.historical_data:
-            print(" 분석할 데이터가 없습니다.")
+            _log.warning("분석할 데이터가 없습니다.")
             return []
-        
-        print(f"[INFO] 총 데이터 수: {len(self.historical_data)}회")
+
+        _log.info("총 데이터 수: %d회", len(self.historical_data))
         
         # 최근 회차 데이터 추출
         recent_data = self.historical_data[-recent_rounds:] if len(self.historical_data) >= recent_rounds else self.historical_data
@@ -124,25 +128,25 @@ class LinePatternAnalyzer:
                 round_num = round_data.get('회차', 0)
                 numbers = self._get_main_numbers_from_row(round_data)
                 
-                print(f"[CHECK] 회차 {round_num}: {numbers}")
-                
+                _log.debug("회차 %s: %s", round_num, numbers)
+
                 if len(numbers) >= 2:
                     pattern = self._analyze_single_round_pattern(round_num, numbers)
                     self.line_patterns.append(pattern)
                 else:
-                    print(f"   [WARN] 회차 {round_num}: 번호가 부족합니다 ({len(numbers)}개)")
-                    
+                    _log.warning("회차 %s: 번호가 부족합니다 (%d개)", round_num, len(numbers))
+
             except Exception as e:
-                print(f"    회차 {i+1} 처리 중 오류: {e}")
+                _log.warning("회차 %d 처리 중 오류: %s", i + 1, e)
                 continue
         
-        print(f" 성공적으로 분석된 패턴: {len(self.line_patterns)}개")
-        
+        _log.info("성공적으로 분석된 패턴: %d개", len(self.line_patterns))
+
         # 패턴 통계 분석
         if self.line_patterns:
             self._analyze_pattern_statistics()
         else:
-            print(" 분석할 수 있는 패턴이 없습니다.")
+            _log.info("분석할 수 있는 패턴이 없습니다.")
         
         return self.line_patterns
     
@@ -253,8 +257,8 @@ class LinePatternAnalyzer:
         if not self.line_patterns:
             return
         
-        print(f"[INFO] 총 분석 회차: {len(self.line_patterns)}회")
-        
+        _log.info("총 분석 회차: %d회", len(self.line_patterns))
+
         # 패턴 타입별 통계
         pattern_types = {}
         for pattern in self.line_patterns:
@@ -262,36 +266,36 @@ class LinePatternAnalyzer:
             if ptype not in pattern_types:
                 pattern_types[ptype] = 0
             pattern_types[ptype] += 1
-        
-        print("\n 패턴 타입별 분포:")
+
+        _log.info("패턴 타입별 분포:")
         for ptype, count in sorted(pattern_types.items(), key=lambda x: x[1], reverse=True):
             percentage = (count / len(self.line_patterns)) * 100
-            print(f"   {ptype}: {count}회 ({percentage:.1f}%)")
-        
+            _log.info("  %s: %d회 (%.1f%%)", ptype, count, percentage)
+
         # 거리 통계
         distances = [p['total_distance'] for p in self.line_patterns]
         avg_distance = sum(distances) / len(distances)
-        print(f"\n 평균 총 거리: {avg_distance:.2f}")
-        
+        _log.info("평균 총 거리: %.2f", avg_distance)
+
         # 방향 변화 통계
         direction_changes = [p['direction_changes'] for p in self.line_patterns]
         avg_changes = sum(direction_changes) / len(direction_changes)
-        print(f" 평균 방향 변화: {avg_changes:.1f}회")
+        _log.info("평균 방향 변화: %.1f회", avg_changes)
     
     def visualize_pattern(self, round_num=None, save_path=None):
         """특정 회차의 선 연결 패턴을 시각화합니다."""
         if not LINE_PATTERN_AVAILABLE:
-            print(" matplotlib이 설치되지 않아 시각화를 사용할 수 없습니다.")
+            _log.warning("matplotlib이 설치되지 않아 시각화를 사용할 수 없습니다.")
             return
-        
+
         # 특정 회차 또는 가장 최근 회차 선택
         if round_num:
             pattern = next((p for p in self.line_patterns if p['round'] == round_num), None)
         else:
             pattern = self.line_patterns[-1] if self.line_patterns else None
-        
+
         if not pattern:
-            print(f" 회차 {round_num}의 패턴을 찾을 수 없습니다.")
+            _log.warning("회차 %s의 패턴을 찾을 수 없습니다.", round_num)
             return
         
         self._create_pattern_visualization(pattern, save_path)
@@ -326,7 +330,7 @@ class LinePatternAnalyzer:
         
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f" 패턴 이미지가 {save_path}에 저장되었습니다.")
+            _log.info("패턴 이미지가 %s에 저장되었습니다.", save_path)
         
         plt.show()
     
@@ -378,11 +382,10 @@ class LinePatternAnalyzer:
     def generate_recommendations(self, exclude_numbers=None, num_recommendations=5):
         """선 연결 패턴을 기반으로 번호를 추천합니다."""
         if not self.line_patterns:
-            print(" 먼저 선 연결 패턴 분석을 수행해주세요.")
+            _log.warning("먼저 선 연결 패턴 분석을 수행해주세요.")
             return []
-        
-        print(f"\n 선 연결 패턴 기반 추천 번호 ({num_recommendations}개)")
-        print("=" * 60)
+
+        _log.info("선 연결 패턴 기반 추천 번호 (%d개)", num_recommendations)
         
         recommendations = []
         
@@ -403,9 +406,7 @@ class LinePatternAnalyzer:
         avg_distance = sum(p['total_distance'] for p in recent_patterns) / len(recent_patterns)
         avg_direction_changes = sum(p['direction_changes'] for p in recent_patterns) / len(recent_patterns)
         
-        print(f"[INFO] 최근 패턴 특성:")
-        print(f"   평균 거리: {avg_distance:.2f}")
-        print(f"   평균 방향 변화: {avg_direction_changes:.1f}회")
+        _log.info("최근 패턴 특성: 평균 거리=%.2f, 평균 방향 변화=%.1f회", avg_distance, avg_direction_changes)
         
         for i in range(num_recommendations):
             numbers = self._generate_pattern_based_numbers(
@@ -426,32 +427,37 @@ class LinePatternAnalyzer:
         # 결과 출력
         for i, rec in enumerate(recommendations, 1):
             pattern_type = rec['pattern_type']
-            print(f"\n{i}. {rec['numbers']} (점수: {rec['score']:.2f}, 패턴: {pattern_type})")
+            _log.info("%d. %s (점수: %.2f, 패턴: %s)", i, rec['numbers'], rec['score'], pattern_type)
         
         return recommendations
     
     def _generate_pattern_based_numbers(self, exclude_numbers, target_distance, target_direction_changes, pattern_weights):
         """패턴 기반으로 번호를 생성합니다."""
         exclude_numbers = exclude_numbers or []
-        available_numbers = [n for n in range(1, 46) if n not in exclude_numbers]
-        
-        if len(available_numbers) < 6:
+        excluded_set = set(exclude_numbers)
+
+        # seen 집합으로 선택된 번호 추적 — O(1) 조회, list.remove() O(n) 루프 제거
+        seen: set = set()
+
+        all_candidates = [n for n in range(1, MAX_LOTTO_NUMBER + 1) if n not in excluded_set]
+        if len(all_candidates) < 6:
             return []
-        
+
         # 시작 번호 선택
-        start_number = random.choice(available_numbers)
+        start_number = random.choice(all_candidates)
         numbers = [start_number]
-        available_numbers.remove(start_number)
-        
+        seen.add(start_number)
+
         # 패턴에 따라 다음 번호들 선택
         for _ in range(5):
+            available_numbers = [n for n in all_candidates if n not in seen]
             if not available_numbers:
                 break
-            
+
             # 현재 패턴의 거리와 방향 변화 계산
             current_distance = self._calculate_current_pattern_distance(numbers)
             current_direction_changes = self._calculate_current_direction_changes(numbers)
-            
+
             # 목표와의 차이에 따라 다음 번호 선택 전략 결정
             if current_distance < target_distance * 0.8:
                 # 거리가 너무 짧으면 더 멀리 있는 번호 선택
@@ -461,17 +467,16 @@ class LinePatternAnalyzer:
                 next_number = self._select_nearby_number(numbers, available_numbers)
             else:
                 # 균형잡힌 선택
-                next_number = self._select_balanced_number(numbers, available_numbers, target_direction_changes, current_direction_changes)
-            
-            if next_number:
-                numbers.append(next_number)
-                available_numbers.remove(next_number)
-            else:
-                # 선택할 수 없으면 랜덤 선택
+                next_number = self._select_balanced_number(
+                    numbers, available_numbers, target_direction_changes, current_direction_changes
+                )
+
+            if next_number is None:
                 next_number = random.choice(available_numbers)
-                numbers.append(next_number)
-                available_numbers.remove(next_number)
-        
+
+            numbers.append(next_number)
+            seen.add(next_number)
+
         return sorted(numbers)
     
     def _calculate_current_pattern_distance(self, numbers):

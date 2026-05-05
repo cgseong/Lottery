@@ -5,6 +5,8 @@ import os
 import tempfile
 from datetime import datetime
 
+from utils.constants import MAX_LOTTO_NUMBER
+
 try:
     from utils.logging_config import get_logger
     _log = get_logger(__name__)
@@ -137,4 +139,4 @@ class ExcludeNumberManager:
 
     def get_available_numbers(self):
         """사용 가능한 번호 목록을 반환합니다."""
-        return [n for n in range(1, 46) if n not in self.exclude_numbers]
+        return [n for n in range(1, MAX_LOTTO_NUMBER + 1) if n not in self.exclude_numbers]

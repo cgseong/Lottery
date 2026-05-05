@@ -11,6 +11,10 @@ from typing import List, Dict, Optional, Set, Tuple, Any
 
 # 상수 import
 from utils.constants import *
+from utils.helpers import normalize_exclude_numbers
+from utils.logging_config import get_logger
+
+_log = get_logger(__name__)
 
 # AI 패턴 학습을 위한 추가 라이브러리
 try:
@@ -38,8 +42,7 @@ class LottoPatternGrouping:
         
     def create_round_groups(self, group_size=5):
         """회차를 그룹으로 나누어 패턴을 분석합니다."""
-        print(f"\n[INFO] 회차 그룹핑 분석 (그룹 크기: {group_size})")
-        print("=" * 60)
+        _log.info("회차 그룹핑 분석 (그룹 크기: %d)", group_size)
         
         groups = []
         for i in range(0, len(self.historical_data), group_size):
@@ -56,27 +59,28 @@ class LottoPatternGrouping:
                         'patterns': self._extract_group_patterns(group_data)
                     })
                 except Exception as e:
-                    print(f" 그룹 {i//group_size + 1} 처리 중 오류: {e}")
+                    _log.warning("그룹 %d 처리 중 오류: %s", i//group_size + 1, e)
                     continue
-        
+
         if not groups:
-            print(" 유효한 그룹을 생성할 수 없습니다.")
+            _log.warning("유효한 그룹을 생성할 수 없습니다.")
             return None
-            
-        print(f" 총 {len(groups)}개의 그룹이 생성되었습니다.")
-        
+
+        _log.info("총 %d개의 그룹이 생성되었습니다.", len(groups))
+
         # 각 그룹의 패턴 분석
         for i, group in enumerate(groups):
             try:
-                print(f"\n 그룹 {i+1}: {group['start_round']}회 ~ {group['end_round']}회")
                 patterns = group['patterns']
                 if patterns:
-                    print(f"   번호 빈도 TOP 5: {patterns.get('top_frequency', [])[:5]}")
-                    print(f"   홀짝 비율: {patterns.get('odd_even_ratio', 'N/A')}")
-                    print(f"   평균 합계: {patterns.get('avg_sum', 0):.1f}")
-                    print(f"   연속번호 패턴: {patterns.get('consecutive_patterns', [])}")
+                    _log.debug("그룹 %d: %s회 ~ %s회 | 번호 빈도 TOP 5: %s | 홀짝 비율: %s | 평균 합계: %.1f | 연속번호 패턴: %s",
+                               i+1, group['start_round'], group['end_round'],
+                               patterns.get('top_frequency', [])[:5],
+                               patterns.get('odd_even_ratio', 'N/A'),
+                               patterns.get('avg_sum', 0),
+                               patterns.get('consecutive_patterns', []))
             except Exception as e:
-                print(f" 그룹 {i+1} 패턴 출력 중 오류: {e}")
+                _log.warning("그룹 %d 패턴 출력 중 오류: %s", i+1, e)
                 continue
         
         self.grouped_patterns = groups
@@ -127,11 +131,11 @@ class LottoPatternGrouping:
                     consecutive_patterns.append(max_consecutive)
                     
                 except Exception as e:
-                    print(f"    행 처리 중 오류: {e}")
+                    _log.warning("행 처리 중 오류: %s", e)
                     continue
-            
+
             if not all_numbers:
-                print("    유효한 번호를 추출할 수 없습니다.")
+                _log.warning("유효한 번호를 추출할 수 없습니다.")
                 return None
                 
             # 번호별 빈도
@@ -148,21 +152,20 @@ class LottoPatternGrouping:
             }
             
         except Exception as e:
-            print(f" 패턴 추출 중 오류: {e}")
+            _log.warning("패턴 추출 중 오류: %s", e)
             return None
     
     def create_pattern_features(self):
         """그룹 패턴을 AI 학습용 특성으로 변환합니다."""
         if not self.grouped_patterns:
-            print(" 먼저 회차 그룹핑을 수행해주세요.")
+            _log.warning("먼저 회차 그룹핑을 수행해주세요.")
             return None
-        
+
         if not AI_PATTERN_AVAILABLE:
-            print(" AI 패턴 학습에 필요한 라이브러리가 설치되지 않았습니다.")
+            _log.warning("AI 패턴 학습에 필요한 라이브러리가 설치되지 않았습니다.")
             return None
-        
-        print("\n AI 학습용 특성 생성 중...")
-        print(f"   그룹 수: {len(self.grouped_patterns)}")
+
+        _log.info("AI 학습용 특성 생성 중... (그룹 수: %d)", len(self.grouped_patterns))
         
         features = []
         labels = []
@@ -176,7 +179,7 @@ class LottoPatternGrouping:
                 
                 # 1. 번호별 빈도 특성 (45개)
                 freq_dist = patterns['frequency_distribution']
-                for num in range(1, 46):
+                for num in range(1, MAX_LOTTO_NUMBER + 1):
                     feature_vector.append(freq_dist.get(num, 0))
                 
                 # 2. 홀짝 비율 특성 (2개)
@@ -184,8 +187,7 @@ class LottoPatternGrouping:
                 feature_vector.append(int(odd_even[0]))
                 feature_vector.append(int(odd_even[1]))
             except Exception as e:
-                print(f" 그룹 {i+1} 처리 중 오류: {e}")
-                print(f"   패턴 데이터: {patterns}")
+                _log.warning("그룹 %d 처리 중 오류: %s | 패턴 데이터: %s", i+1, e, patterns)
                 continue
             
             try:
@@ -212,25 +214,42 @@ class LottoPatternGrouping:
                 feature_vector.extend(section_dist)
                 
                 features.append(feature_vector)
-                
-                # 레이블: 다음 그룹의 성공 여부 (임시로 랜덤)
-                labels.append(1 if random.random() > 0.5 else 0)
+
+                # 레이블: 현재 그룹 상위 빈도 번호가 다음 그룹에서 출현하는 비율로 결정
+                # (무작위 레이블 대신 실제 데이터 기반 레이블 사용)
+                if i + 1 < len(self.grouped_patterns):
+                    next_nums: set = set()
+                    for _row in self.grouped_patterns[i + 1]['data']:
+                        for _col in [f'번호{_j}' for _j in range(1, 7)]:
+                            if _col in _row and _row[_col]:
+                                try:
+                                    next_nums.add(int(_row[_col]))
+                                except (ValueError, TypeError):
+                                    pass
+                    top_nums = set(num for num, _ in patterns['top_frequency'][:10])
+                    overlap = len(top_nums & next_nums)
+                    # 기댓값: 상위 10개 번호 중 약 6~7개가 다음 그룹에 출현 (무작위 기준)
+                    # 겹침 수가 기댓값 이상이면 패턴 지속 → 레이블 1
+                    expected_overlap = round(len(top_nums) * len(next_nums) / 45)
+                    labels.append(1 if overlap >= max(expected_overlap, 4) else 0)
+                else:
+                    # 마지막 그룹은 비교 대상 없음 → 기본값 0
+                    labels.append(0)
             except Exception as e:
-                print(f" 그룹 {i+1} 특성 생성 중 오류: {e}")
+                _log.warning("그룹 %d 특성 생성 중 오류: %s", i+1, e)
                 continue
-        
+
         if not features:
-            print(" 생성된 특성 벡터가 없습니다.")
+            _log.warning("생성된 특성 벡터가 없습니다.")
             return None
-            
+
         self.pattern_features = {
             'features': np.array(features),
             'labels': np.array(labels),
             'feature_names': self._get_feature_names()
         }
-        
-        print(f" {len(features)}개의 특성 벡터가 생성되었습니다.")
-        print(f"   특성 차원: {len(features[0])}개")
+
+        _log.info("%d개의 특성 벡터가 생성되었습니다. (특성 차원: %d개)", len(features), len(features[0]))
         
         return self.pattern_features
     
@@ -239,7 +258,7 @@ class LottoPatternGrouping:
         names = []
         
         # 번호별 빈도
-        for i in range(1, 46):
+        for i in range(1, MAX_LOTTO_NUMBER + 1):
             names.append(f"freq_{i}")
         
         # 홀짝 비율
@@ -259,15 +278,14 @@ class LottoPatternGrouping:
     def perform_clustering(self, n_clusters=5):
         """그룹 패턴을 클러스터링합니다."""
         if not self.pattern_features:
-            print(" 먼저 특성을 생성해주세요.")
+            _log.warning("먼저 특성을 생성해주세요.")
             return None
-        
+
         if not AI_PATTERN_AVAILABLE:
-            print(" AI 패턴 학습에 필요한 라이브러리가 설치되지 않았습니다.")
+            _log.warning("AI 패턴 학습에 필요한 라이브러리가 설치되지 않았습니다.")
             return None
-        
-        print(f"\n 패턴 클러스터링 (클러스터 수: {n_clusters})")
-        print("=" * 60)
+
+        _log.info("패턴 클러스터링 (클러스터 수: %d)", n_clusters)
         
         features = self.pattern_features['features']
         
@@ -299,14 +317,13 @@ class LottoPatternGrouping:
         }
         
         # 클러스터 분석 결과 출력
-        print(f" {n_clusters}개의 클러스터가 생성되었습니다.")
+        _log.info("%d개의 클러스터가 생성되었습니다.", n_clusters)
         for i in range(n_clusters):
             analysis = cluster_analysis[i]
-            print(f"\n[INFO] 클러스터 {i+1} ({analysis['size']}개 그룹):")
             patterns = analysis['patterns']
-            print(f"   평균 홀짝 비율: {patterns['avg_odd_even']}")
-            print(f"   평균 합계: {patterns['avg_sum']:.1f}")
-            print(f"   주요 번호: {patterns['top_numbers'][:5]}")
+            _log.info("클러스터 %d (%d개 그룹): 평균 홀짝 비율=%s, 평균 합계=%.1f, 주요 번호=%s",
+                      i+1, analysis['size'], patterns['avg_odd_even'],
+                      patterns['avg_sum'], patterns['top_numbers'][:5])
         
         return self.cluster_models['kmeans']
     
@@ -341,15 +358,14 @@ class LottoPatternGrouping:
     def train_ai_models(self):
         """AI 모델들을 훈련합니다."""
         if not self.pattern_features:
-            print(" 먼저 특성을 생성해주세요.")
+            _log.warning("먼저 특성을 생성해주세요.")
             return None
-        
+
         if not AI_PATTERN_AVAILABLE:
-            print(" AI 패턴 학습에 필요한 라이브러리가 설치되지 않았습니다.")
+            _log.warning("AI 패턴 학습에 필요한 라이브러리가 설치되지 않았습니다.")
             return None
-        
-        print("\n AI 모델 훈련 중...")
-        print("=" * 60)
+
+        _log.info("AI 모델 훈련 중...")
         
         features = self.pattern_features['features']
         labels = self.pattern_features['labels']
@@ -372,20 +388,20 @@ class LottoPatternGrouping:
         
         # 모델 훈련 및 평가
         for name, model in models.items():
-            print(f"\n {name} 모델 훈련 중...")
-            
+            _log.info("%s 모델 훈련 중...", name)
+
             # 훈련
             model.fit(X_train_scaled, y_train)
-            
+
             # 예측
             y_pred = model.predict(X_test_scaled)
             accuracy = accuracy_score(y_test, y_pred)
-            
+
             # 교차 검증
             cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=5)
-            
-            print(f"   테스트 정확도: {accuracy:.3f}")
-            print(f"   교차 검증 정확도: {cv_scores.mean():.3f} (+/- {cv_scores.std() * 2:.3f})")
+
+            _log.info("%s: 테스트 정확도=%.3f, 교차 검증 정확도=%.3f (+/- %.3f)",
+                      name, accuracy, cv_scores.mean(), cv_scores.std() * 2)
             
             # 모델 저장
             self.ai_models[name] = {
@@ -395,28 +411,17 @@ class LottoPatternGrouping:
                 'cv_scores': cv_scores
             }
         
-        print(f"\n {len(models)}개의 AI 모델이 훈련되었습니다.")
+        _log.info("%d개의 AI 모델이 훈련되었습니다.", len(models))
         return self.ai_models
     
     def predict_high_probability_combinations(self, exclude_numbers=None, num_combinations=10):
         """AI 모델을 사용하여 높은 확률의 조합을 예측합니다."""
         if not self.ai_models:
-            print(" 먼저 AI 모델을 훈련해주세요.")
+            _log.warning("먼저 AI 모델을 훈련해주세요.")
             return []
         
-        if exclude_numbers is None:
-            exclude_numbers = set()
-        else:
-            # exclude_numbers가 딕셔너리인 경우 키만 추출
-            if isinstance(exclude_numbers, dict):
-                exclude_numbers = set(exclude_numbers.keys())
-            elif isinstance(exclude_numbers, list):
-                exclude_numbers = set(exclude_numbers)
-            else:
-                exclude_numbers = set(exclude_numbers)
-        
-        print(f"\n AI 기반 높은 확률 조합 예측 (예측 개수: {num_combinations})")
-        print("=" * 60)
+        exclude_numbers = normalize_exclude_numbers(exclude_numbers)
+        _log.info("AI 기반 높은 확률 조합 예측 (예측 개수: %d)", num_combinations)
         
         # 최근 패턴을 기반으로 특성 벡터 생성
         recent_groups = self.grouped_patterns[-3:]  # 최근 3개 그룹
@@ -444,10 +449,9 @@ class LottoPatternGrouping:
         # 평균 확률 계산
         avg_probability = sum(predictions.values()) / len(predictions)
         
-        print(f"[INFO] AI 모델 예측 확률:")
+        _log.info("AI 모델 예측 확률: 평균=%.3f", avg_probability)
         for name, prob in predictions.items():
-            print(f"   {name}: {prob:.3f}")
-        print(f"   평균: {avg_probability:.3f}")
+            _log.debug("  %s: %.3f", name, prob)
         
         # 높은 확률을 기반으로 번호 조합 생성
         high_prob_combinations = self._generate_high_probability_combinations(
@@ -462,7 +466,7 @@ class LottoPatternGrouping:
         
         # 번호별 빈도 특성 (45개)
         freq_dist = patterns['frequency_distribution']
-        for num in range(1, 46):
+        for num in range(1, MAX_LOTTO_NUMBER + 1):
             feature_vector.append(freq_dist.get(num, 0))
         
         # 홀짝 비율 특성 (2개)
@@ -514,9 +518,7 @@ class LottoPatternGrouping:
             weight_factor = 1.2
             max_consecutive = 4
         
-        print(f" 확률 기반 생성 파라미터:")
-        print(f"   가중치 계수: {weight_factor}")
-        print(f"   최대 연속번호: {max_consecutive}")
+        _log.info("확률 기반 생성 파라미터: 가중치 계수=%.1f, 최대 연속번호=%d", weight_factor, max_consecutive)
         
         while len(combinations) < num_combinations and attempts < max_attempts:
             attempts += 1
@@ -550,20 +552,15 @@ class LottoPatternGrouping:
             }
             
             combinations.append(combination_info)
-            print(f"    {len(combinations)}번째 조합 생성: {combination_info['numbers']}")
-        
-        print(f"\n {len(combinations)}개의 높은 확률 조합이 생성되었습니다.")
+            _log.debug("  %d번째 조합 생성: %s", len(combinations), combination_info['numbers'])
+
+        _log.info("%d개의 높은 확률 조합이 생성되었습니다.", len(combinations))
         return combinations
     
     def _select_numbers_from_clusters(self, exclude_numbers, weight_factor):
         """클러스터 정보를 기반으로 번호를 선택합니다."""
-        # exclude_numbers가 딕셔너리인 경우 키만 추출
-        if isinstance(exclude_numbers, dict):
-            exclude_numbers = list(exclude_numbers.keys())
-        elif isinstance(exclude_numbers, set):
-            exclude_numbers = list(exclude_numbers)
-        
-        available_numbers = [n for n in range(1, 46) if n not in exclude_numbers]
+        exclude_numbers = normalize_exclude_numbers(exclude_numbers)
+        available_numbers = [n for n in range(1, MAX_LOTTO_NUMBER + 1) if n not in exclude_numbers]
         if len(available_numbers) < 6:
             return None
         
@@ -599,13 +596,8 @@ class LottoPatternGrouping:
     
     def _select_numbers_random(self, exclude_numbers, weight_factor):
         """랜덤하게 번호를 선택합니다."""
-        # exclude_numbers가 딕셔너리인 경우 키만 추출
-        if isinstance(exclude_numbers, dict):
-            exclude_numbers = list(exclude_numbers.keys())
-        elif isinstance(exclude_numbers, set):
-            exclude_numbers = list(exclude_numbers)
-        
-        available_numbers = [n for n in range(1, 46) if n not in exclude_numbers]
+        exclude_numbers = normalize_exclude_numbers(exclude_numbers)
+        available_numbers = [n for n in range(1, MAX_LOTTO_NUMBER + 1) if n not in exclude_numbers]
         if len(available_numbers) < 6:
             return None
         
@@ -703,9 +695,9 @@ class LottoPatternGrouping:
     def save_models(self, filepath='ai_pattern_models.pkl'):
         """훈련된 모델들을 파일로 저장합니다."""
         if not self.ai_models:
-            print(" 저장할 모델이 없습니다.")
+            _log.warning("저장할 모델이 없습니다.")
             return False
-        
+
         try:
             model_data = {
                 'ai_models': self.ai_models,
@@ -713,14 +705,14 @@ class LottoPatternGrouping:
                 'pattern_features': self.pattern_features,
                 'grouped_patterns': self.grouped_patterns
             }
-            
+
             with open(filepath, 'wb') as f:
                 pickle.dump(model_data, f)
-            
-            print(f" AI 모델들이 {filepath}에 저장되었습니다.")
+
+            _log.info("AI 모델들이 %s에 저장되었습니다.", filepath)
             return True
         except Exception as e:
-            print(f" 모델 저장 실패: {e}")
+            _log.error("모델 저장 실패: %s", e)
             return False
     
     def load_models(self, filepath='ai_pattern_models.pkl'):
@@ -734,43 +726,36 @@ class LottoPatternGrouping:
             self.pattern_features = model_data.get('pattern_features', {})
             self.grouped_patterns = model_data.get('grouped_patterns', [])
             
-            print(f" AI 모델들이 {filepath}에서 로드되었습니다.")
+            _log.info("AI 모델들이 %s에서 로드되었습니다.", filepath)
             return True
         except FileNotFoundError:
-            print(f" 모델 파일 {filepath}을 찾을 수 없습니다.")
+            _log.warning("모델 파일 %s을 찾을 수 없습니다.", filepath)
             return False
         except Exception as e:
-            print(f" 모델 로드 실패: {e}")
+            _log.error("모델 로드 실패: %s", e)
             return False
     
     def print_analysis_report(self):
         """AI 패턴 분석 리포트를 출력합니다."""
         if not self.grouped_patterns:
-            print(" 먼저 회차 그룹핑을 수행해주세요.")
+            _log.warning("먼저 회차 그룹핑을 수행해주세요.")
             return
-        
-        print("\n[INFO] AI 패턴 분석 리포트")
-        print("=" * 80)
-        
-        # 그룹 정보
-        print(f" 총 그룹 수: {len(self.grouped_patterns)}개")
-        
+
+        _log.info("AI 패턴 분석 리포트 - 총 그룹 수: %d개", len(self.grouped_patterns))
+
         # 클러스터 정보
         if self.cluster_models and 'kmeans' in self.cluster_models:
             cluster_info = self.cluster_models['kmeans']
-            print(f" 클러스터 수: {len(cluster_info['analysis'])}개")
-            
+            _log.info("클러스터 수: %d개", len(cluster_info['analysis']))
+
             for cluster_id, analysis in cluster_info['analysis'].items():
-                print(f"\n[INFO] 클러스터 {cluster_id + 1}:")
-                print(f"   그룹 수: {analysis['size']}개")
                 patterns = analysis['patterns']
-                print(f"   주요 번호: {patterns['top_numbers'][:5]}")
-                print(f"   평균 합계: {patterns['avg_sum']:.1f}")
-        
+                _log.info("클러스터 %d: 그룹 수=%d개, 주요 번호=%s, 평균 합계=%.1f",
+                          cluster_id + 1, analysis['size'],
+                          patterns['top_numbers'][:5], patterns['avg_sum'])
+
         # AI 모델 정보
         if self.ai_models:
-            print(f"\n AI 모델 수: {len(self.ai_models)}개")
+            _log.info("AI 모델 수: %d개", len(self.ai_models))
             for name, model_info in self.ai_models.items():
-                print(f"   {name}: 정확도 {model_info['accuracy']:.3f}")
-        
-        print("=" * 80) 
+                _log.info("  %s: 정확도 %.3f", name, model_info['accuracy']) 

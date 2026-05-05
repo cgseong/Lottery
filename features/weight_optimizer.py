@@ -3,6 +3,9 @@ from __future__ import annotations
 from typing import Dict, List
 
 from analyzers.statistical_analyzer import StatisticalAnalyzer, _DEFAULT_SCORE_WEIGHTS
+from utils.logging_config import get_logger
+
+_log = get_logger(__name__)
 
 # 탐색할 가중치 조합 후보
 _WEIGHT_CANDIDATES: List[Dict[str, float]] = [
@@ -36,14 +39,14 @@ class WeightOptimizer:
         """최적 가중치를 탐색하여 반환합니다."""
         min_required = self.test_rounds + 50
         if len(self.historical_data) < min_required:
-            print(f"[WARN] 데이터가 부족합니다 (최소 {min_required}회차 필요). 기본 가중치 사용.")
+            _log.warning("데이터가 부족합니다 (최소 %d회차 필요). 기본 가중치 사용.", min_required)
             return dict(_DEFAULT_SCORE_WEIGHTS)
 
         # 학습 / 검증 분리
         train_data = self.historical_data[:-self.test_rounds]
         test_data = self.historical_data[-self.test_rounds:]
 
-        print(f"   학습 데이터: {len(train_data)}회차 / 검증 데이터: {len(test_data)}회차")
+        _log.info("학습 데이터: %d회차 / 검증 데이터: %d회차", len(train_data), len(test_data))
 
         # 기본 분석기로 후보 조합 생성 (가중치 탐색에 공통 사용)
         base_analyzer = StatisticalAnalyzer(train_data)
@@ -59,11 +62,11 @@ class WeightOptimizer:
         candidate_numbers = [c['numbers'] for c in candidates]
 
         if not candidate_numbers:
-            print("[WARN] 후보 조합 생성 실패. 기본 가중치 사용.")
+            _log.warning("후보 조합 생성 실패. 기본 가중치 사용.")
             return dict(_DEFAULT_SCORE_WEIGHTS)
 
-        print(f"   후보 조합 {len(candidate_numbers)}개 생성 완료")
-        print(f"   {len(_WEIGHT_CANDIDATES)}개 가중치 조합 평가 중...")
+        _log.info("후보 조합 %d개 생성 완료, %d개 가중치 조합 평가 중...",
+                  len(candidate_numbers), len(_WEIGHT_CANDIDATES))
 
         best_weights = dict(_DEFAULT_SCORE_WEIGHTS)
         best_rate = 0.0
@@ -96,14 +99,12 @@ class WeightOptimizer:
                 best_weights = dict(w_combo)
 
             label = "기본값" if i == 0 else f"조합{i:02d}"
-            print(f"   [{label}] f={w_combo['frequency']:.2f} s={w_combo['sum']:.2f} "
-                  f"t={w_combo['trend']:.2f} d={w_combo['distribution']:.2f} "
-                  f"→ 3매치율 {rate:.4f}")
+            _log.debug("[%s] f=%.2f s=%.2f t=%.2f d=%.2f → 3매치율 %.4f",
+                       label, w_combo['frequency'], w_combo['sum'],
+                       w_combo['trend'], w_combo['distribution'], rate)
 
-        print(f"\n   최적 가중치: frequency={best_weights['frequency']:.2f}, "
-              f"sum={best_weights['sum']:.2f}, "
-              f"trend={best_weights['trend']:.2f}, "
-              f"distribution={best_weights['distribution']:.2f}")
-        print(f"   최적 3매치율: {best_rate:.4f}")
+        _log.info("최적 가중치: frequency=%.2f, sum=%.2f, trend=%.2f, distribution=%.2f  3매치율=%.4f",
+                  best_weights['frequency'], best_weights['sum'],
+                  best_weights['trend'], best_weights['distribution'], best_rate)
 
         return best_weights

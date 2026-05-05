@@ -11,6 +11,8 @@ import joblib
 import os
 import warnings
 
+from utils.constants import MAX_LOTTO_NUMBER
+
 try:
     from utils.logging_config import get_logger
     _log = get_logger(__name__)
@@ -46,7 +48,7 @@ class AIPatternLearner:
     def load_data(self) -> Optional[pd.DataFrame]:
         """데이터를 로드하고 시간순(회차 오름차순)으로 정렬합니다."""
         if not os.path.exists(self.data_file):
-            print(f"[!] 데이터 파일이 없습니다: {self.data_file}")
+            _log.warning("데이터 파일이 없습니다: %s", self.data_file)
             return None
             
         try:
@@ -101,7 +103,7 @@ class AIPatternLearner:
                 
                 # [피처 4] 1~45번 각 번호별 미출현 기간 (Missing Duration) 계산
                 missing_duration = []
-                for num in range(1, 46):
+                for num in range(1, MAX_LOTTO_NUMBER + 1):
                     if last_seen[num] == -1:
                         # 한 번도 나온 적 없는 초기 번호는 임의의 큰 페널티 또는 기간 부여
                         missing_duration.append(50)
@@ -159,15 +161,15 @@ class AIPatternLearner:
 
     def train_models(self) -> bool:
         """Multi-label 분류 모델(Boosting 기반)을 학습시킵니다."""
-        print(" AI 모델 학습 시작 (파생 피처 및 Multi-Label 적용)...")
-        
+        _log.info("AI 모델 학습 시작 (파생 피처 및 Multi-Label 적용)")
+
         df = self.load_data()
         if df is None or len(df) <= self.window_size:
-            print("[WARN] 데이터 로드 실패 또는 데이터 양이 너무 적습니다.")
+            _log.warning("데이터 로드 실패 또는 데이터 양이 너무 적습니다.")
             return False
-            
+
         X, y, self.last_seen = self.prepare_dataset(df)
-        
+
         # 모델 검증을 위해 9:1로 데이터 분할
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
 
@@ -176,9 +178,9 @@ class AIPatternLearner:
             n_comp = min(self.pca_components, X_train.shape[1], X_train.shape[0])
             self._pca = PCA(n_components=n_comp, random_state=42)
             X_train = self._pca.fit_transform(X_train)
-            print(f"   - PCA 적용: {X.shape[1]}차원 → {n_comp}차원")
+            _log.info("PCA 적용: %d차원 → %d차원", X.shape[1], n_comp)
 
-        print("   - HistGradientBoostingClassifier (LightGBM 호환) 에 MultiOutput 학습 중...")
+        _log.info("HistGradientBoostingClassifier (LightGBM 호환) 에 MultiOutput 학습 중...")
         try:
             base_estimator = HistGradientBoostingClassifier(max_iter=100, random_state=42)
             self.model = MultiOutputClassifier(base_estimator)
@@ -189,7 +191,7 @@ class AIPatternLearner:
             self.model.fit(X_train, y_train)
         
         self.is_trained = True
-        print(" 모델 학습 완료")
+        _log.info("모델 학습 완료")
         return True
 
     def _get_current_features(self, df: pd.DataFrame) -> np.ndarray:
@@ -205,7 +207,7 @@ class AIPatternLearner:
         
         current_idx = len(data)
         missing_duration = []
-        for num in range(1, 46):
+        for num in range(1, MAX_LOTTO_NUMBER + 1):
             if self.last_seen is not None and self.last_seen[num] != -1:
                 missing_duration.append(current_idx - self.last_seen[num])
             else:
@@ -339,7 +341,7 @@ class AIPatternLearner:
             digest = self._hash_file(filename)
             with open(filename + '.sha256', 'w') as f:
                 f.write(digest)
-            print(f" 모델 저장 완료: {filename}")
+            _log.info("모델 저장 완료: %s", filename)
 
     def load_models(self, filename: str = 'ai_models.pkl') -> bool:
         """저장된 모델 상태를 불러옵니다. SHA256 해시로 무결성을 검증합니다."""
@@ -351,8 +353,7 @@ class AIPatternLearner:
                 expected = f.read().strip()
             actual = self._hash_file(filename)
             if actual != expected:
-                print(f"[WARN] 모델 파일 무결성 검증 실패: {filename}. 재학습이 필요합니다.")
-                _log.warning("모델 파일 무결성 검증 실패: %s", filename)
+                _log.warning("모델 파일 무결성 검증 실패: %s. 재학습이 필요합니다.", filename)
                 return False
         data = joblib.load(filename)
         if isinstance(data, tuple) and len(data) == 3:
@@ -363,5 +364,5 @@ class AIPatternLearner:
             self.model = data
         self.use_pca = self._pca is not None
         self.is_trained = True
-        print(f" 모델 로드 완료: {filename}")
+        _log.info("모델 로드 완료: %s", filename)
         return True

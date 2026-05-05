@@ -231,7 +231,7 @@ class ComprehensiveAnalyzer:
     def _number_sampling_weights(self, exclude: set) -> np.ndarray:
         """번호 1~45의 샘플링 확률 벡터 (인덱스 i → 번호 i+1)"""
         raw = np.zeros(45, dtype=float)
-        for n in range(1, 46):
+        for n in range(1, _NUM_BALLS + 1):
             if n in exclude:
                 continue
             raw[n - 1] = (
@@ -262,7 +262,7 @@ class ComprehensiveAnalyzer:
             return []
 
         exclude = exclude_numbers or set()
-        if len([n for n in range(1, 46) if n not in exclude]) < 6:
+        if len([n for n in range(1, _NUM_BALLS + 1) if n not in exclude]) < 6:
             return []
 
         p = self._number_sampling_weights(exclude)
@@ -319,11 +319,11 @@ class ComprehensiveAnalyzer:
         if n == 0:
             return {}
         top5 = sorted(
-            [(int(i), int(self._freq[i])) for i in range(1, 46)],
+            [(int(i), int(self._freq[i])) for i in range(1, _NUM_BALLS + 1)],
             key=lambda x: x[1], reverse=True
         )[:5]
         cold5 = sorted(
-            [(int(i), int(self._last_seen[i])) for i in range(1, 46)],
+            [(int(i), int(self._last_seen[i])) for i in range(1, _NUM_BALLS + 1)],
             key=lambda x: x[1]
         )[:5]
         return {

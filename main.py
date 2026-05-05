@@ -42,24 +42,10 @@ class LottoSystem:
             self._optimize_weights(silent=True)
 
     def _load_data(self) -> List[Dict]:
-        import csv
-        data = []
-        if os.path.exists(self.data_file):
-            encodings = ['utf-8', 'cp949', 'euc-kr']
-            for enc in encodings:
-                try:
-                    with open(self.data_file, 'r', encoding=enc) as f:
-                        reader = csv.DictReader(f)
-                        temp_data = list(reader)
-                        if temp_data:
-                            keys = list(temp_data[0].keys())
-                            if any('번호1' in str(k) for k in keys):
-                                data = temp_data
-                                break
-                except Exception:
-                    continue
-            if not data:
-                print(" 데이터를 읽을 수 없습니다. 파일 인코딩이나 형식을 확인해주세요.")
+        from utils.file_utils import load_csv_data
+        data = load_csv_data(self.data_file)
+        if not data and os.path.exists(self.data_file):
+            print(" 데이터를 읽을 수 없습니다. 파일 인코딩이나 형식을 확인해주세요.")
         return data
 
     def _optimize_weights(self, silent: bool = False):
@@ -423,12 +409,13 @@ class LottoSystem:
         section_data = self.stat_analyzer.analyze_section_distribution()
 
         # 1. 빈도 점수: 6개 번호의 평균 빈도를 전체 번호 중 상위 몇 %인지로 환산
+        # sorted(set(...))으로 중복값 제거 후 percentile 계산 — index() 첫번째 값 반환 오류 방지
         freq_map = freq_data.get('frequency', {})
-        all_freqs = sorted(freq_map.values())
-        total_nums = len(all_freqs)
         num_freqs = [freq_map.get(n, 0) for n in nums]
-        if all_freqs and all_freqs[-1] > 0:
-            ranks = [all_freqs.index(f) / max(total_nums - 1, 1) for f in num_freqs]
+        sorted_unique = sorted(set(freq_map.values()))
+        n_unique = len(sorted_unique)
+        if sorted_unique and sorted_unique[-1] > 0:
+            ranks = [sorted_unique.index(f) / max(n_unique - 1, 1) for f in num_freqs]
             freq_score = sum(ranks) / 6
         else:
             freq_score = 0.5

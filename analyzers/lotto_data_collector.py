@@ -14,6 +14,11 @@ except ImportError:
     import logging
     _log = logging.getLogger(__name__)
 
+try:
+    from utils.constants import DEFAULT_HEADERS as _DEFAULT_HEADERS
+except ImportError:
+    _DEFAULT_HEADERS = None
+
 
 class LottoDataCollector:
     """동행복권 사이트에서 로또 당첨번호를 수집하는 클래스"""
@@ -23,9 +28,10 @@ class LottoDataCollector:
         self.search_url = "https://dhlottery.co.kr/gameResult.do?method=byWin"
         self.round_url_template = "https://dhlottery.co.kr/gameResult.do?method=byWin&drwNo={}"
         self.api_url_template = "https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo={}"
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        # constants.DEFAULT_HEADERS 공유 — 중복 정의 방지
+        self.headers = dict(_DEFAULT_HEADERS) if _DEFAULT_HEADERS else {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'ko-KR,ko;q=0.8,en-US;q=0.5,en;q=0.3',
             'Accept-Encoding': 'gzip, deflate',
             'Connection': 'keep-alive',
@@ -110,6 +116,8 @@ class LottoDataCollector:
 
     def _find_latest_round_via_api(self):
         """API 기반으로 최신 회차를 빠르게 찾습니다."""
+        # 현재 연도(2025 기준) 최신 회차는 1100 이상 — 비현실적인 결과(lo=1) 차단
+        _MIN_PLAUSIBLE_ROUND = 1000
         lo, hi = 1, 2048
         while lo < hi:
             mid = (lo + hi + 1) // 2
@@ -117,7 +125,10 @@ class LottoDataCollector:
                 lo = mid
             else:
                 hi = mid - 1
-        # API 전체 다운 시 lo=1 오반환 방지: 실제 유효 여부 검증
+        # API 전체 다운 시 lo=1 오반환 방지: 실제 유효 여부 + 최솟값 검증
+        if lo < _MIN_PLAUSIBLE_ROUND:
+            _log.warning("이진탐색 결과(%d)가 현실적 최솟값(%d) 미만 — API 다운으로 판단", lo, _MIN_PLAUSIBLE_ROUND)
+            return None
         return lo if self._fetch_round_json(lo) else None
 
     def collect_winning_numbers(self, start_round=None, end_round=None, max_rounds=100):
@@ -130,7 +141,7 @@ class LottoDataCollector:
             print(" 최신 회차 정보를 가져올 수 없습니다.")
             return []
 
-        print(f"[INFO] 최신 회차: {latest_round}회")
+        _log.info("최신 회차: %d회", latest_round)
 
         # 수집 범위 설정
         if end_round is None:
@@ -340,7 +351,7 @@ class LottoDataCollector:
                 writer.writerows(all_data)
 
             print(f" {len(new_data)}개 회차 데이터가 {filename}에 저장되었습니다.")
-            print(f"[INFO] 총 {len(all_data)}개 회차 데이터가 있습니다.")
+            _log.info("총 %d개 회차 데이터가 있습니다.", len(all_data))
             return True
 
         except Exception as e:

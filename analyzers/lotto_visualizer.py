@@ -1,4 +1,4 @@
-
+from utils.constants import MAX_LOTTO_NUMBER
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
@@ -34,7 +34,7 @@ class LottoVisualizer:
             return col, row
 
         # 모든 번호 (1~45) 그리기 (배경)
-        for n in range(1, 46):
+        for n in range(1, MAX_LOTTO_NUMBER + 1):
             c, r = get_coord(n)
             # 빨간 괄호 스타일: [ n ]
             ax.text(c, r, f"[{n}]", ha='center', va='center', fontsize=10, color='red', alpha=0.3)

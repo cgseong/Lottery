@@ -7,6 +7,9 @@ MAX_LOTTO_NUMBER = 45
 NUM_LOTTO_NUMBERS_TO_PICK = 6
 DEFAULT_RECENT_COUNT = 10
 
+# 전체 번호 목록 (불변 tuple — range(1, 46) 직접 작성 반복 방지)
+ALL_NUMBERS: tuple = tuple(range(1, MAX_LOTTO_NUMBER + 1))
+
 # 로또 번호 컬럼명
 LOTTO_NUMBER_COLUMNS = [f'번호{i}' for i in range(1, 7)]
 BONUS_COLUMN = '보너스번호'
