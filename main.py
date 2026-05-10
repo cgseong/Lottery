@@ -610,8 +610,11 @@ class LottoSystem:
         num_weight: dict   = defaultdict(float)
         num_count:  dict   = defaultdict(int)
 
+        num_appeared: dict = defaultdict(list)   # {번호: [(회차번호, 몇회전), ...]}
+
         for rank, row in enumerate(rows):   # rows[0] = 최신 회차
             w = 1.0 / (rank + 1)           # 최신일수록 가중치 ↑
+            round_no = row.get('회차', '?')
             nums = []
             for i in range(1, 7):
                 try:
@@ -625,6 +628,7 @@ class LottoSystem:
             for n in nums:
                 num_weight[n] += w
                 num_count[n]  += 1
+                num_appeared[n].append((round_no, rank + 1))  # rank+1 = 몇 회차 전
 
         groups = {}
         for name, lo, hi, color in self._COLOR_GROUPS:
@@ -655,11 +659,13 @@ class LottoSystem:
         return {
             'n_rounds': n_rounds,
             'groups': groups,
-            'num_weight': dict(num_weight),
-            'num_count':  dict(num_count),
+            'num_weight':   dict(num_weight),
+            'num_count':    dict(num_count),
+            'num_appeared': dict(num_appeared),   # {번호: [(회차, 몇회전), ...]}
         }
 
-    def _recommend_by_color_pattern(self, analysis: dict) -> tuple:
+    def _recommend_by_color_pattern(self, analysis: dict,
+                                    prev_nums: set | None = None) -> tuple:
         """컬러 패턴 분석으로 6개 추천번호와 그룹별 픽 수를 반환합니다.
 
         알고리즘:
@@ -667,16 +673,19 @@ class LottoSystem:
           2. Largest Remainder Method로 합=6이 되도록 정수화
           3. 각 그룹에서 가중 빈도 상위 번호를 순서대로 선택
           4. 부족분은 전체 가중 빈도 순으로 보충
+          5. 직전 회차 번호 포함을 최대 1개로 제한
+
+        Args:
+            analysis:   _analyze_color_patterns() 반환값
+            prev_nums:  직전 회차 당첨번호 집합 (None이면 제한 없음)
 
         Returns:
             (sorted_numbers: list[int], pick_counts: dict[str, int])
         """
-        import random
-
         if not analysis or not analysis.get('groups'):
             return [], {}
 
-        groups = analysis['groups']
+        groups     = analysis['groups']
         num_weight = analysis['num_weight']
 
         # 1. 트렌드 반영 기대값
@@ -725,7 +734,56 @@ class LottoSystem:
                 if len(selected) == 6:
                     break
 
+        # 5. 직전 회차 번호 최대 1개 제한
+        if prev_nums:
+            selected = self._limit_prev_overlap(selected, analysis, prev_nums)
+
         return sorted(selected[:6]), pick_counts
+
+    def _limit_prev_overlap(self, selected: list, analysis: dict,
+                            prev_nums: set) -> list:
+        """직전 회차 번호와의 겹침을 최대 1개로 줄입니다.
+
+        겹치는 번호 중 가중 빈도가 가장 낮은 것부터 같은 컬러 그룹 내
+        직전 회차 미포함 번호로 교체합니다.
+        """
+        num_weight = analysis['num_weight']
+        overlap = [n for n in selected if n in prev_nums]
+
+        if len(overlap) <= 1:
+            return selected   # 이미 조건 충족
+
+        # 가중치 낮은 순으로 정렬 → 낮은 것부터 교체 (가장 높은 1개는 남김)
+        overlap_sorted = sorted(overlap, key=lambda n: num_weight.get(n, 0.0))
+        to_replace = overlap_sorted[:-1]   # 마지막(가중치 최고) 1개는 유지
+
+        result = list(selected)
+        for num_out in to_replace:
+            # 같은 컬러 그룹에서 대체 후보 탐색
+            group_info = next(
+                (info for name, info in analysis['groups'].items()
+                 if info['lo'] <= num_out <= info['hi']),
+                None,
+            )
+            candidate = None
+            if group_info:
+                for cand in group_info['all_nums']:
+                    if cand not in result and cand not in prev_nums:
+                        candidate = cand
+                        break
+            # 같은 그룹 내 대체 불가 → 전체에서 가중치 순 탐색
+            if candidate is None:
+                for cand in sorted(range(1, 46),
+                                   key=lambda n: num_weight.get(n, 0.0),
+                                   reverse=True):
+                    if cand not in result and cand not in prev_nums:
+                        candidate = cand
+                        break
+            if candidate is not None:
+                result.remove(num_out)
+                result.append(candidate)
+
+        return result
 
     def _print_color_analysis(self, analysis: dict, recommended: list,
                               pick_counts: dict):
@@ -777,6 +835,89 @@ class LottoSystem:
         print(f"║   {balls_str}")
         print(f"║")
         print("╚" + "═" * 62 + "╝")
+
+    def _print_recommendation_reasons(self, analysis: dict, recommended: list,
+                                      pick_counts: dict, prev_nums: set):
+        """추천번호별 선택 이유를 출력합니다.
+
+        직전 회차 번호가 포함된 경우 강조하며, 모든 추천번호의
+        선택 근거(그룹 순위·출현 이력·트렌드 반영)를 표시합니다.
+        """
+        if not analysis or not recommended:
+            return
+
+        reset  = '\033[0m'
+        bold   = '\033[1m'
+        white  = '\033[97m'
+        gray   = '\033[90m'
+        yellow = '\033[93m'
+        red    = '\033[91m'
+        green  = '\033[92m'
+
+        num_weight   = analysis['num_weight']
+        num_count    = analysis['num_count']
+        num_appeared = analysis['num_appeared']
+        n_rounds     = analysis['n_rounds']
+
+        print()
+        print("┌" + "─" * 62 + "┐")
+        print(f"│{bold}  추천번호 선택 이유 분석{reset}" + " " * 38 + "│")
+        print("├" + "─" * 62 + "┤")
+
+        for num in recommended:
+            # 소속 그룹 정보
+            group_name = group_color = group_rank = None
+            for gname, lo, hi, gcol in self._COLOR_GROUPS:
+                if lo <= num <= hi:
+                    group_name  = gname
+                    group_color = gcol
+                    all_in_grp  = analysis['groups'][gname]['all_nums']
+                    group_rank  = all_in_grp.index(num) + 1 if num in all_in_grp else '-'
+                    break
+
+            ball_str    = self._ball(num)
+            count       = num_count.get(num, 0)
+            appeared    = num_appeared.get(num, [])  # [(회차, 몇회전), ...]
+            w           = num_weight.get(num, 0.0)
+            trend       = analysis['groups'][group_name]['trend'] if group_name else '→'
+            grp_pick    = pick_counts.get(group_name, 0)
+
+            # 직전 회차 포함 여부
+            is_prev = num in prev_nums
+            flag    = f" {red}★직전 회차 포함{reset}" if is_prev else ''
+
+            # 출현 회차 요약 (최근 3개)
+            appeared_str = ''
+            if appeared:
+                recent3 = appeared[:3]
+                parts   = [f"{r}회({d}회전)" for r, d in recent3]
+                if len(appeared) > 3:
+                    parts.append(f"외 {len(appeared)-3}회")
+                appeared_str = ', '.join(parts)
+
+            # 트렌드 표시
+            t_sym   = {'↑': green + '↑ 상승', '↓': red + '↓ 하락', '→': yellow + '→ 안정'}[trend]
+            t_label = f"{t_sym}{reset}"
+
+            # 라인 출력
+            label = f"{group_color}{bold}{white}{group_name}{reset}" if group_name else ''
+            print(f"│  {ball_str}  {label} {group_rank}순위{flag}")
+            print(f"│        출현: {count}/{n_rounds}회  가중빈도: {w:.3f}  그룹 트렌드: {t_label} → {grp_pick}개 배정")
+            if appeared_str:
+                print(f"│        출현 회차: {gray}{appeared_str}{reset}")
+
+            # 직전 회차 포함 이유 상세 설명
+            if is_prev:
+                rank_in_all = sorted(num_weight.keys(),
+                                     key=lambda x: num_weight[x],
+                                     reverse=True)
+                overall_rank = rank_in_all.index(num) + 1 if num in rank_in_all else '-'
+                print(f"│        {yellow}→ 직전 회차 당첨번호이나 전체 가중빈도 {overall_rank}위 · "
+                      f"{group_name} 그룹 {group_rank}순위로 선택{reset}")
+
+            print("│")
+
+        print("└" + "─" * 62 + "┘")
 
     # ── 컬러 패턴 분석 끝 ────────────────────────────
 
@@ -884,12 +1025,27 @@ class LottoSystem:
                 for row in target_rows:
                     self._print_round_row(row)
 
+                # 직전 회차(가장 최신 회차) 번호 추출
+                prev_nums: set = set()
+                if target_rows:
+                    latest = target_rows[0]
+                    for i in range(1, 7):
+                        try:
+                            prev_nums.add(int(latest[f'번호{i}']))
+                        except (ValueError, TypeError):
+                            pass
+
                 # 컬러 패턴 분석 + 추천
                 if n < 5:
-                    print(f"  [INFO] 패턴 분석은 5회 이상 데이터에서 더 정확합니다.")
+                    print("  [INFO] 패턴 분석은 5회 이상 데이터에서 더 정확합니다.")
                 analysis  = self._analyze_color_patterns(target_rows)
-                rec_nums, pick_counts = self._recommend_by_color_pattern(analysis)
+                rec_nums, pick_counts = self._recommend_by_color_pattern(
+                    analysis, prev_nums=prev_nums
+                )
                 self._print_color_analysis(analysis, rec_nums, pick_counts)
+                self._print_recommendation_reasons(
+                    analysis, rec_nums, pick_counts, prev_nums
+                )
 
                 # 저장 여부
                 if rec_nums:
