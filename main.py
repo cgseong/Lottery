@@ -554,6 +554,15 @@ class LottoSystem:
         (41, 45): '\033[42m',   # 초록 (41~45)
     }
 
+    # (이름, 시작, 끝, ANSI 색상코드)
+    _COLOR_GROUPS = [
+        ('노랑', 1,  10, '\033[43m'),
+        ('파랑', 11, 20, '\033[44m'),
+        ('빨강', 21, 30, '\033[41m'),
+        ('회색', 31, 40, '\033[100m'),
+        ('초록', 41, 45, '\033[42m'),
+    ]
+
     def _ball(self, number: int, is_bonus: bool = False) -> str:
         """번호를 ANSI 컬러 볼 문자열로 반환합니다."""
         reset = '\033[0m'
@@ -568,6 +577,208 @@ class LottoSystem:
                     color = c
                     break
         return f"{color}{bold}{white} {number:2d} {reset}"
+
+    # ── 컬러 패턴 분석 ──────────────────────────────
+
+    def _analyze_color_patterns(self, rows: list) -> dict:
+        """최근 N회 데이터로 컬러 그룹별 패턴을 분석합니다.
+
+        Returns:
+            {
+              'n_rounds': int,
+              'groups': {
+                  그룹이름: {
+                      'lo', 'hi', 'color',
+                      'avg_all': float,   # 전체 평균 출현 수/회
+                      'avg_recent': float,# 최근 5회 평균
+                      'trend': '↑'|'↓'|'→',
+                      'top5': [int, ...], # 가중 빈도 상위 5개 번호
+                  }
+              },
+              'num_weight': {번호: float},   # 번호별 가중 빈도
+              'num_count':  {번호: int},     # 번호별 출현 횟수
+            }
+        """
+        from collections import defaultdict
+
+        n_rounds = len(rows)
+        if n_rounds == 0:
+            return {}
+
+        recent5 = min(5, n_rounds)
+        group_counts: dict = {name: [] for name, *_ in self._COLOR_GROUPS}
+        num_weight: dict   = defaultdict(float)
+        num_count:  dict   = defaultdict(int)
+
+        for rank, row in enumerate(rows):   # rows[0] = 최신 회차
+            w = 1.0 / (rank + 1)           # 최신일수록 가중치 ↑
+            nums = []
+            for i in range(1, 7):
+                try:
+                    nums.append(int(row[f'번호{i}']))
+                except (ValueError, TypeError):
+                    pass
+
+            for name, lo, hi, _ in self._COLOR_GROUPS:
+                group_counts[name].append(sum(1 for n in nums if lo <= n <= hi))
+
+            for n in nums:
+                num_weight[n] += w
+                num_count[n]  += 1
+
+        groups = {}
+        for name, lo, hi, color in self._COLOR_GROUPS:
+            counts      = group_counts[name]
+            avg_all     = sum(counts) / n_rounds
+            avg_recent  = sum(counts[:recent5]) / recent5
+
+            if avg_recent > avg_all + 0.15:
+                trend = '↑'
+            elif avg_recent < avg_all - 0.15:
+                trend = '↓'
+            else:
+                trend = '→'
+
+            group_nums = sorted(
+                range(lo, hi + 1),
+                key=lambda n: num_weight.get(n, 0.0),
+                reverse=True,
+            )
+            groups[name] = {
+                'lo': lo, 'hi': hi, 'color': color,
+                'avg_all': avg_all, 'avg_recent': avg_recent,
+                'trend': trend,
+                'top5': group_nums[:5],
+                'all_nums': group_nums,  # 가중치 정렬된 전체 목록
+            }
+
+        return {
+            'n_rounds': n_rounds,
+            'groups': groups,
+            'num_weight': dict(num_weight),
+            'num_count':  dict(num_count),
+        }
+
+    def _recommend_by_color_pattern(self, analysis: dict) -> tuple:
+        """컬러 패턴 분석으로 6개 추천번호와 그룹별 픽 수를 반환합니다.
+
+        알고리즘:
+          1. 트렌드를 반영한 기대값(raw_picks)을 그룹별로 계산
+          2. Largest Remainder Method로 합=6이 되도록 정수화
+          3. 각 그룹에서 가중 빈도 상위 번호를 순서대로 선택
+          4. 부족분은 전체 가중 빈도 순으로 보충
+
+        Returns:
+            (sorted_numbers: list[int], pick_counts: dict[str, int])
+        """
+        import random
+
+        if not analysis or not analysis.get('groups'):
+            return [], {}
+
+        groups = analysis['groups']
+        num_weight = analysis['num_weight']
+
+        # 1. 트렌드 반영 기대값
+        raw_picks: dict = {}
+        for name, info in groups.items():
+            avg = info['avg_all']
+            rct = info['avg_recent']
+            if info['trend'] == '↑':
+                raw_picks[name] = avg * 0.4 + rct * 0.6
+            elif info['trend'] == '↓':
+                raw_picks[name] = avg * 0.6 + rct * 0.4
+            else:
+                raw_picks[name] = (avg + rct) / 2.0
+
+        # 2. Largest Remainder Method → 합 = 6
+        floors = {name: int(v) for name, v in raw_picks.items()}
+        remainders = sorted(
+            raw_picks.items(),
+            key=lambda x: x[1] - int(x[1]),
+            reverse=True,
+        )
+        deficit = 6 - sum(floors.values())
+        pick_counts: dict = dict(floors)
+        for i in range(max(0, deficit)):
+            pick_counts[remainders[i % len(remainders)][0]] += 1
+
+        # 3. 각 그룹에서 상위 번호 선택
+        selected: list = []
+        for name, info in groups.items():
+            cnt = pick_counts.get(name, 0)
+            if cnt == 0:
+                continue
+            pool = [n for n in info['all_nums'] if n not in selected]
+            selected.extend(pool[:cnt])
+
+        # 4. 혹시 6개 미만이면 전체 가중치 순으로 보충
+        if len(selected) < 6:
+            all_sorted = sorted(
+                range(1, 46),
+                key=lambda n: num_weight.get(n, 0.0),
+                reverse=True,
+            )
+            for n in all_sorted:
+                if n not in selected:
+                    selected.append(n)
+                if len(selected) == 6:
+                    break
+
+        return sorted(selected[:6]), pick_counts
+
+    def _print_color_analysis(self, analysis: dict, recommended: list,
+                              pick_counts: dict):
+        """컬러 패턴 분석 결과와 추천번호를 출력합니다."""
+        if not analysis:
+            return
+
+        reset = '\033[0m'
+        bold  = '\033[1m'
+        white = '\033[97m'
+        gray  = '\033[90m'
+
+        n = analysis['n_rounds']
+        print()
+        print("╔" + "═" * 62 + "╗")
+        print(f"║{bold}  컬러 패턴 분석  (최근 {n}회 기준){reset}" +
+              " " * (62 - 19 - len(str(n))) + "║")
+        print("╠" + "═" * 62 + "╣")
+        header = (f"  {'컬러':<7} {'번호대':<7} {'전체평균':>6} "
+                  f"{'최근5회':>7} {'트렌드':>5}  {'픽수':>3}  상위 번호")
+        print(f"║{header:<62}║")
+        print("╠" + "─" * 62 + "╣")
+
+        for name, lo, hi, color in self._COLOR_GROUPS:
+            info = groups = analysis['groups'][name]
+            avg_all    = info['avg_all']
+            avg_recent = info['avg_recent']
+            trend      = info['trend']
+            top5       = info['top5']
+            cnt        = pick_counts.get(name, 0)
+
+            t_color = ('\033[92m' if trend == '↑' else
+                       '\033[91m' if trend == '↓' else '\033[93m')
+            label = f"{color}{bold}{white}{name}{reset}"
+            top_str = ', '.join(str(n) for n in top5[:4])
+
+            row_str = (f"  {label}  {lo:2d}~{hi:2d}   "
+                       f"{avg_all:5.2f}    {avg_recent:5.2f}   "
+                       f"{t_color}{trend}{reset}   {cnt:2d}  {top_str}")
+            # 박스 너비 보정 (ANSI 코드는 출력 폭에 미포함)
+            print(f"║{row_str}")
+
+        print("╠" + "═" * 62 + "╣")
+
+        # 추천번호 출력
+        balls_str = "  ".join(self._ball(n) for n in recommended)
+        print(f"║  {bold}이번 회차 추천 번호{reset}  ({gray}컬러 패턴 기반{reset})")
+        print(f"║")
+        print(f"║   {balls_str}")
+        print(f"║")
+        print("╚" + "═" * 62 + "╝")
+
+    # ── 컬러 패턴 분석 끝 ────────────────────────────
 
     def _format_prize(self, amount_won: str) -> str:
         """당첨금액을 억 단위 문자열로 변환합니다. (예: '1860000000' → '18.6억')"""
@@ -669,8 +880,23 @@ class LottoSystem:
                 except ValueError:
                     n = 10
                 print()
-                for row in rows[:n]:
+                target_rows = rows[:n]
+                for row in target_rows:
                     self._print_round_row(row)
+
+                # 컬러 패턴 분석 + 추천
+                if n < 5:
+                    print(f"  [INFO] 패턴 분석은 5회 이상 데이터에서 더 정확합니다.")
+                analysis  = self._analyze_color_patterns(target_rows)
+                rec_nums, pick_counts = self._recommend_by_color_pattern(analysis)
+                self._print_color_analysis(analysis, rec_nums, pick_counts)
+
+                # 저장 여부
+                if rec_nums:
+                    save = input("\n 이 추천 번호를 저장하시겠습니까? (y/n): ").lower()
+                    if save == 'y':
+                        self.storage.save_combination(rec_nums, f"컬러패턴 추천(최근{n}회)")
+                        print("   저장되었습니다.")
 
             elif sub == '2':
                 raw = input(" 조회할 회차 번호 (쉼표로 여러 개, 예: 1223 또는 1220,1221,1222): ").strip()
