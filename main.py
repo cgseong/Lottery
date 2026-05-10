@@ -85,7 +85,7 @@ class LottoSystem:
         print(" 6. 고유 패턴 추천 (AI + 미출현)")
         print(" 7. 데이터 수집 / 자동 업데이트")
         print(" 8. 종합 패턴 분석 추천 (10개 지표)")
-        print(" 9. 회차별 당첨번호 조회")
+        print(" 9. 전체 패턴 분석 기반 번호 추천")
         print(" 0. 종료")
         print("=" * 60)
 
@@ -1492,116 +1492,56 @@ class LottoSystem:
         print()
 
     def show_round_info(self):
-        """9. 회차별 당첨번호 조회"""
+        """9. 전체 패턴 분석 기반 번호 추천"""
         rows = self._load_round_data()
         if not rows:
             print("\n[WARN] 데이터가 없습니다. 메뉴 7번(데이터 수집)을 먼저 실행해주세요.")
             return
 
-        total = len(rows)
+        total     = len(rows)
         max_round = int(rows[0].get('회차', 0))
         min_round = int(rows[-1].get('회차', 0))
 
-        while True:
-            print("\n" + "=" * 60)
-            print(f" 회차별 당첨번호 조회  [{min_round}회 ~ {max_round}회, 총 {total}회차]")
-            print("=" * 60)
-            print(" 1. 최근 N회 보기")
-            print(" 2. 특정 회차 검색")
-            print(" 3. 특정 번호 포함 회차 검색")
-            print(" 0. 뒤로가기")
-            sub = input("\n 선택: ").strip()
+        print(f"\n 전체 {total}회차 데이터 패턴 분석 중... "
+              f"({min_round}회 ~ {max_round}회)")
 
-            if sub == '0':
-                break
+        # 직전(최신) 회차 번호 추출 및 표시
+        prev_nums: set = set()
+        latest = rows[0]
+        for i in range(1, 7):
+            try:
+                prev_nums.add(int(latest[f'번호{i}']))
+            except (ValueError, TypeError):
+                pass
 
-            elif sub == '1':
-                try:
-                    n = int(input(" 최근 몇 회차를 볼까요? (기본 10): ").strip() or '10')
-                    n = max(1, min(n, total))
-                except ValueError:
-                    n = 10
-                print()
-                target_rows = rows[:n]
-                for row in target_rows:
-                    self._print_round_row(row)
+        prev_date = latest.get('날짜', '')
+        date_str  = f"  {prev_date}" if prev_date else ''
+        balls_str = "  ".join(self._ball(n) for n in sorted(prev_nums))
+        try:
+            bonus_ball = "  \033[90m+\033[0m  " + self._ball(
+                int(latest.get('보너스번호', '')), is_bonus=True)
+        except (ValueError, TypeError):
+            bonus_ball = ''
+        print(f" 직전 당첨번호 ({max_round}회{date_str}): {balls_str}{bonus_ball}")
 
-                # 직전 회차(가장 최신 회차) 번호 추출
-                prev_nums: set = set()
-                if target_rows:
-                    latest = target_rows[0]
-                    for i in range(1, 7):
-                        try:
-                            prev_nums.add(int(latest[f'번호{i}']))
-                        except (ValueError, TypeError):
-                            pass
+        # 종합 패턴 분석
+        analysis_all = self._analyze_all_patterns(rows)
+        rec_nums, pick_counts = self._recommend_by_all_patterns(
+            analysis_all, prev_nums=prev_nums
+        )
 
-                # 종합 패턴 분석 + 추천
-                if n < 5:
-                    print("  [INFO] 패턴 분석은 5회 이상 데이터에서 더 정확합니다.")
-                analysis_all = self._analyze_all_patterns(target_rows)
-                rec_nums, pick_counts = self._recommend_by_all_patterns(
-                    analysis_all, prev_nums=prev_nums
-                )
-                self._print_all_pattern_analysis(analysis_all, rec_nums, prev_nums)
-                self._print_recommendation_reasons(
-                    analysis_all['color'], rec_nums, pick_counts, prev_nums
-                )
+        self._print_all_pattern_analysis(analysis_all, rec_nums, prev_nums)
+        self._print_recommendation_reasons(
+            analysis_all['color'], rec_nums, pick_counts, prev_nums
+        )
 
-                # 저장 여부
-                if rec_nums:
-                    save = input("\n 이 추천 번호를 저장하시겠습니까? (y/n): ").lower()
-                    if save == 'y':
-                        self.storage.save_combination(rec_nums, f"컬러패턴 추천(최근{n}회)")
-                        print("   저장되었습니다.")
-
-            elif sub == '2':
-                raw = input(" 조회할 회차 번호 (쉼표로 여러 개, 예: 1223 또는 1220,1221,1222): ").strip()
-                try:
-                    targets = {int(r.strip()) for r in raw.split(',') if r.strip()}
-                except ValueError:
-                    print(" 숫자만 입력해주세요.")
-                    continue
-                matched = [r for r in rows if int(r.get('회차', 0)) in targets]
-                matched.sort(key=lambda r: int(r.get('회차', 0)), reverse=True)
-                if matched:
-                    print()
-                    for row in matched:
-                        self._print_round_row(row)
-                else:
-                    print(f"\n[WARN] {targets} 회차를 찾을 수 없습니다.")
-
-            elif sub == '3':
-                raw = input(" 포함할 번호 (쉼표로 여러 개, 예: 7,13,42): ").strip()
-                try:
-                    search_nums = {int(r.strip()) for r in raw.split(',') if r.strip()}
-                    invalid = [n for n in search_nums if not (1 <= n <= 45)]
-                    if invalid:
-                        print(f" 유효하지 않은 번호: {invalid}  (1~45 사이)")
-                        continue
-                except ValueError:
-                    print(" 숫자만 입력해주세요.")
-                    continue
-
-                matched = []
-                for row in rows:
-                    nums_in_row = set()
-                    for i in range(1, 7):
-                        try:
-                            nums_in_row.add(int(row.get(f'번호{i}', 0)))
-                        except (ValueError, TypeError):
-                            pass
-                    if search_nums.issubset(nums_in_row):
-                        matched.append(row)
-
-                if matched:
-                    print(f"\n {search_nums} 포함 회차: {len(matched)}건\n")
-                    for row in matched:
-                        self._print_round_row(row)
-                else:
-                    print(f"\n[INFO] {search_nums} 번호를 모두 포함하는 회차가 없습니다.")
-            else:
-                print(" 잘못된 입력입니다.")
+        # 저장 여부
+        if rec_nums:
+            save = input("\n 이 추천 번호를 저장하시겠습니까? (y/n): ").lower()
+            if save == 'y':
+                self.storage.save_combination(
+                    rec_nums, f"전체패턴 분석 추천({total}회차)")
+                print("   저장되었습니다.")
 
     def run_auto_update(self):
         """7. 데이터 수집 / 자동 업데이트"""
