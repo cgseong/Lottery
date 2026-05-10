@@ -85,6 +85,7 @@ class LottoSystem:
         print(" 6. 고유 패턴 추천 (AI + 미출현)")
         print(" 7. 데이터 수집 / 자동 업데이트")
         print(" 8. 종합 패턴 분석 추천 (10개 지표)")
+        print(" 9. 회차별 당첨번호 조회")
         print(" 0. 종료")
         print("=" * 60)
 
@@ -108,6 +109,8 @@ class LottoSystem:
                 self.run_auto_update()
             elif choice == '8':
                 self.comprehensive_recommend()
+            elif choice == '9':
+                self.show_round_info()
             elif choice == '0':
                 print("\n 프로그램을 종료합니다.")
                 break
@@ -538,6 +541,184 @@ class LottoSystem:
         if save == 'y':
             self.storage.save_combination(best['numbers'], "AI 미출현 패턴")
             print("    저장되었습니다.")
+
+    # ──────────────────────────────────────────────
+    # 9. 회차별 당첨번호 조회
+    # ──────────────────────────────────────────────
+
+    _BALL_COLORS = {
+        (1, 10):  '\033[43m',   # 노랑 (1~10)
+        (11, 20): '\033[44m',   # 파랑 (11~20)
+        (21, 30): '\033[41m',   # 빨강 (21~30)
+        (31, 40): '\033[100m',  # 회색 (31~40)
+        (41, 45): '\033[42m',   # 초록 (41~45)
+    }
+
+    def _ball(self, number: int, is_bonus: bool = False) -> str:
+        """번호를 ANSI 컬러 볼 문자열로 반환합니다."""
+        reset = '\033[0m'
+        bold  = '\033[1m'
+        white = '\033[97m'
+        if is_bonus:
+            color = '\033[45m'  # 보너스: 마젠타
+        else:
+            color = '\033[100m'
+            for (lo, hi), c in self._BALL_COLORS.items():
+                if lo <= number <= hi:
+                    color = c
+                    break
+        return f"{color}{bold}{white} {number:2d} {reset}"
+
+    def _format_prize(self, amount_won: str) -> str:
+        """당첨금액을 억 단위 문자열로 변환합니다. (예: '1860000000' → '18.6억')"""
+        try:
+            won = int(amount_won)
+            eok = won / 1_0000_0000
+            return f"{eok:.1f}억"
+        except (ValueError, TypeError):
+            return '-'
+
+    def _load_round_data(self) -> list:
+        """CSV에서 전체 회차 데이터를 읽어 정렬된 리스트로 반환합니다."""
+        import csv as _csv
+        path = self.data_file
+        if not os.path.exists(path):
+            return []
+        encodings = ['utf-8', 'cp949', 'euc-kr']
+        for enc in encodings:
+            try:
+                with open(path, 'r', encoding=enc) as f:
+                    rows = list(_csv.DictReader(f))
+                if rows:
+                    rows.sort(key=lambda r: int(r.get('회차', 0)), reverse=True)
+                    return rows
+            except Exception:
+                continue
+        return []
+
+    def _print_round_row(self, row: dict):
+        """회차 1개를 이미지와 유사한 형식으로 출력합니다."""
+        round_no  = row.get('회차', '?')
+        date_str  = row.get('날짜', '')
+        bonus     = row.get('보너스번호', '')
+        winners   = row.get('1등당첨자수', '')
+        prize_raw = row.get('1등당첨금액', '')
+
+        # 번호 6개
+        balls = []
+        for i in range(1, 7):
+            val = row.get(f'번호{i}', '')
+            try:
+                balls.append(self._ball(int(val)))
+            except (ValueError, TypeError):
+                balls.append(f" {val:>2} ")
+
+        # 보너스 볼
+        try:
+            bonus_ball = self._ball(int(bonus), is_bonus=True)
+        except (ValueError, TypeError):
+            bonus_ball = f" {bonus} "
+
+        # 헤더 라인: 회차 번호 (빨간색)
+        red   = '\033[91m'
+        reset = '\033[0m'
+        bold  = '\033[1m'
+        gray  = '\033[90m'
+
+        balls_str = '  '.join(balls)
+        prize_str = self._format_prize(prize_raw) if prize_raw else ''
+        winner_str = f"{winners}명" if winners else ''
+
+        line1 = f"  {red}{bold}{round_no:>4}회{reset}  {balls_str}  {gray}+{reset}  {bonus_ball}"
+        if winner_str or prize_str:
+            line1 += f"   {gray}{winner_str}  {prize_str}{reset}"
+        print(line1)
+
+        if date_str:
+            print(f"         {gray}{date_str}{reset}")
+        print()
+
+    def show_round_info(self):
+        """9. 회차별 당첨번호 조회"""
+        rows = self._load_round_data()
+        if not rows:
+            print("\n[WARN] 데이터가 없습니다. 메뉴 7번(데이터 수집)을 먼저 실행해주세요.")
+            return
+
+        total = len(rows)
+        max_round = int(rows[0].get('회차', 0))
+        min_round = int(rows[-1].get('회차', 0))
+
+        while True:
+            print("\n" + "=" * 60)
+            print(f" 회차별 당첨번호 조회  [{min_round}회 ~ {max_round}회, 총 {total}회차]")
+            print("=" * 60)
+            print(" 1. 최근 N회 보기")
+            print(" 2. 특정 회차 검색")
+            print(" 3. 특정 번호 포함 회차 검색")
+            print(" 0. 뒤로가기")
+            sub = input("\n 선택: ").strip()
+
+            if sub == '0':
+                break
+
+            elif sub == '1':
+                try:
+                    n = int(input(" 최근 몇 회차를 볼까요? (기본 10): ").strip() or '10')
+                    n = max(1, min(n, total))
+                except ValueError:
+                    n = 10
+                print()
+                for row in rows[:n]:
+                    self._print_round_row(row)
+
+            elif sub == '2':
+                raw = input(" 조회할 회차 번호 (쉼표로 여러 개, 예: 1223 또는 1220,1221,1222): ").strip()
+                try:
+                    targets = {int(r.strip()) for r in raw.split(',') if r.strip()}
+                except ValueError:
+                    print(" 숫자만 입력해주세요.")
+                    continue
+                matched = [r for r in rows if int(r.get('회차', 0)) in targets]
+                matched.sort(key=lambda r: int(r.get('회차', 0)), reverse=True)
+                if matched:
+                    print()
+                    for row in matched:
+                        self._print_round_row(row)
+                else:
+                    print(f"\n[WARN] {targets} 회차를 찾을 수 없습니다.")
+
+            elif sub == '3':
+                raw = input(" 포함할 번호 (쉼표로 여러 개, 예: 7,13,42): ").strip()
+                try:
+                    search_nums = {int(r.strip()) for r in raw.split(',') if r.strip()}
+                    invalid = [n for n in search_nums if not (1 <= n <= 45)]
+                    if invalid:
+                        print(f" 유효하지 않은 번호: {invalid}  (1~45 사이)")
+                        continue
+                except ValueError:
+                    print(" 숫자만 입력해주세요.")
+                    continue
+
+                matched = []
+                for row in rows:
+                    nums_in_row = set()
+                    for i in range(1, 7):
+                        try:
+                            nums_in_row.add(int(row.get(f'번호{i}', 0)))
+                        except (ValueError, TypeError):
+                            pass
+                    if search_nums.issubset(nums_in_row):
+                        matched.append(row)
+
+                if matched:
+                    print(f"\n {search_nums} 포함 회차: {len(matched)}건\n")
+                    for row in matched:
+                        self._print_round_row(row)
+                else:
+                    print(f"\n[INFO] {search_nums} 번호를 모두 포함하는 회차가 없습니다.")
+            else:
+                print(" 잘못된 입력입니다.")
 
     def run_auto_update(self):
         """7. 데이터 수집 / 자동 업데이트"""

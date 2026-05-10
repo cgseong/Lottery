@@ -277,20 +277,24 @@ class LottoDataCollector:
             return None
 
     def _extract_numbers_from_json(self, payload, round_num):
-        """JSON payload에서 당첨번호를 추출합니다."""
+        """JSON payload에서 당첨번호와 부가정보(날짜·당첨자수·당첨금)를 추출합니다."""
         try:
             if not payload or payload.get("returnValue") != "success":
                 return None
-            return {
+            record = {
                 '회차': int(payload.get('drwNo', round_num)),
+                '날짜': payload.get('drwNoDate', ''),
                 '번호1': int(payload.get('drwtNo1')),
                 '번호2': int(payload.get('drwtNo2')),
                 '번호3': int(payload.get('drwtNo3')),
                 '번호4': int(payload.get('drwtNo4')),
                 '번호5': int(payload.get('drwtNo5')),
                 '번호6': int(payload.get('drwtNo6')),
-                '보너스번호': int(payload.get('bnusNo'))
+                '보너스번호': int(payload.get('bnusNo')),
+                '1등당첨자수': int(payload.get('firstPrzwnerCo', 0)),
+                '1등당첨금액': int(payload.get('firstWinamnt', 0)),
             }
+            return record
         except Exception:
             return None
 
@@ -342,11 +346,15 @@ class LottoDataCollector:
             # 회차 순으로 정렬
             all_data.sort(key=lambda x: int(x['회차']))
 
-            # CSV 파일로 저장
-            fieldnames = ['회차', '번호1', '번호2', '번호3', '번호4', '번호5', '번호6', '보너스번호']
+            # CSV 파일로 저장 — 새 데이터에 확장 컬럼이 있으면 포함
+            base_fields = ['회차', '날짜', '번호1', '번호2', '번호3', '번호4', '번호5', '번호6', '보너스번호', '1등당첨자수', '1등당첨금액']
+            # 기존 데이터에 없는 컬럼은 빈 값으로 채움
+            for row in all_data:
+                for field in base_fields:
+                    row.setdefault(field, '')
 
             with open(filename, 'w', newline='', encoding='utf-8') as file:
-                writer = csv.DictWriter(file, fieldnames=fieldnames)
+                writer = csv.DictWriter(file, fieldnames=base_fields, extrasaction='ignore')
                 writer.writeheader()
                 writer.writerows(all_data)
 
