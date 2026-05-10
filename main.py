@@ -118,11 +118,176 @@ class LottoSystem:
                 print("\n 잘못된 입력입니다.")
             input("\n계속하려면 Enter를 누르세요...")
 
+    # ── 최신 회차 당첨번호 분석 ────────────────────────
+
+    def _analyze_latest_round(self):
+        """가장 최신 회차 당첨번호의 상세 분석을 출력합니다."""
+        rows = self._load_round_data()   # 최신순 정렬
+        if not rows:
+            return
+
+        latest = rows[0]
+        prev   = rows[1] if len(rows) > 1 else None
+
+        round_no  = latest.get('회차', '?')
+        date_str  = latest.get('날짜', '')
+        bonus_raw = latest.get('보너스번호', '')
+
+        # 번호 파싱
+        nums = []
+        for i in range(1, 7):
+            try:
+                nums.append(int(latest[f'번호{i}']))
+            except (ValueError, TypeError):
+                pass
+        nums.sort()
+
+        try:
+            bonus = int(bonus_raw)
+        except (ValueError, TypeError):
+            bonus = None
+
+        if not nums:
+            return
+
+        # ── 전체 통계 (stat_analyzer 사용) ──
+        sum_stats    = self.stat_analyzer.analyze_sum_range()   if self.stat_analyzer else {}
+        odd_stats    = self.stat_analyzer.analyze_odd_even()    if self.stat_analyzer else {}
+        section_hist = (self.stat_analyzer.analyze_section_distribution()
+                        if self.stat_analyzer else {})
+        all_data     = (self.stat_analyzer.historical_data
+                        if self.stat_analyzer else [])
+
+        avg_sum = float(sum_stats.get('avg_sum', 138))
+        min_sum = int(sum_stats.get('min_sum', 21))
+        max_sum = int(sum_stats.get('max_sum', 279))
+        avg_odd = float(odd_stats.get('avg_odd', 3.0))
+
+        # 이번 회차 값
+        total_sum   = sum(nums)
+        odd_count   = sum(1 for n in nums if n % 2 != 0)
+        even_count  = 6 - odd_count
+        consec_pairs = sum(1 for a, b in zip(nums, nums[1:]) if b - a == 1)
+
+        s1 = sum(1 for n in nums if 1  <= n <= 15)
+        s2 = sum(1 for n in nums if 16 <= n <= 30)
+        s3 = sum(1 for n in nums if 31 <= n <= 45)
+
+        # 합계 백분위
+        if all_data and max_sum > min_sum:
+            lower = sum(
+                1 for row in all_data
+                if sum(int(row.get(f'번호{i}', 0)) for i in range(1, 7)) < total_sum
+            )
+            percentile = lower / len(all_data) * 100
+        else:
+            percentile = 50.0
+
+        # 컬러 그룹 구성
+        grp_counts = {}
+        for gname, lo, hi, gcol in self._COLOR_GROUPS:
+            cnt = sum(1 for n in nums if lo <= n <= hi)
+            if cnt:
+                grp_counts[gname] = (cnt, gcol)
+
+        # 직전 회차 겹침
+        overlap_nums = []
+        if prev:
+            prev_set = set()
+            for i in range(1, 7):
+                try:
+                    prev_set.add(int(prev[f'번호{i}']))
+                except (ValueError, TypeError):
+                    pass
+            overlap_nums = [n for n in nums if n in prev_set]
+
+        # ── 출력 ──
+        reset  = '\033[0m'
+        bold   = '\033[1m'
+        white  = '\033[97m'
+        gray   = '\033[90m'
+        green  = '\033[92m'
+        red    = '\033[91m'
+        yellow = '\033[93m'
+        cyan   = '\033[96m'
+
+        title_extra = f"  {gray}{date_str}{reset}" if date_str else ''
+        print()
+        print("╔" + "═" * 62 + "╗")
+        header_text = f"  최신 당첨번호 분석  ({round_no}회{title_extra})"
+        print(f"║{bold}{cyan}{header_text}{reset}")
+        print("╠" + "═" * 62 + "╣")
+
+        # 컬러 볼 라인
+        balls_str = "  ".join(self._ball(n) for n in nums)
+        bonus_str = (f"  {gray}+{reset}  {self._ball(bonus, is_bonus=True)}"
+                     if bonus else '')
+        print(f"║   {balls_str}{bonus_str}")
+        print("╠" + "─" * 62 + "╣")
+
+        # 합계
+        diff      = total_sum - avg_sum
+        diff_sign = f"+{diff:.1f}" if diff >= 0 else f"{diff:.1f}"
+        pct_label = f"상위 {100-percentile:.0f}%" if percentile >= 50 else f"하위 {percentile:.0f}%"
+        print(f"║  합계       {bold}{total_sum:>4}{reset}  "
+              f"(전체 평균 {avg_sum:.1f} 대비 {yellow}{diff_sign}{reset}  ·  {gray}{pct_label}{reset})")
+
+        # 홀짝
+        odd_diff = odd_count - round(avg_odd)
+        odd_mark = (f"{green}+{odd_diff}{reset}" if odd_diff > 0
+                    else (f"{red}{odd_diff}{reset}" if odd_diff < 0 else f"{gray}±0{reset}"))
+        print(f"║  홀짝       홀수 {bold}{odd_count}{reset}개 / 짝수 {bold}{even_count}{reset}개"
+              f"  (평균 홀수 {avg_odd:.1f}개 대비 {odd_mark})")
+
+        # 구간 분포
+        hist_pct = section_hist.get('percentages', {})
+        def _bar(cnt):
+            return '●' * cnt + '○' * (6 - cnt)
+        print(f"║  구간 분포  1-15: {bold}{s1}{reset}개 {gray}{_bar(s1)}{reset}  "
+              f"16-30: {bold}{s2}{reset}개 {gray}{_bar(s2)}{reset}  "
+              f"31-45: {bold}{s3}{reset}개 {gray}{_bar(s3)}{reset}")
+
+        # 연속 번호
+        if consec_pairs == 0:
+            consec_label = f"{gray}없음{reset}"
+        else:
+            pairs = [(a, b) for a, b in zip(nums, nums[1:]) if b - a == 1]
+            pairs_str = ', '.join(f"{a}-{b}" for a, b in pairs)
+            consec_label = f"{yellow}{consec_pairs}쌍  ({pairs_str}){reset}"
+        print(f"║  연속 번호  {consec_label}")
+
+        # 컬러 그룹 구성
+        grp_parts = []
+        for gname, lo, hi, gcol in self._COLOR_GROUPS:
+            if gname in grp_counts:
+                cnt, gcol2 = grp_counts[gname]
+                grp_parts.append(
+                    f"{gcol2}{bold}{white}{gname}{reset} {cnt}개"
+                )
+        print(f"║  컬러 구성  {'  ·  '.join(grp_parts)}")
+
+        # 직전 회차 대비
+        if prev:
+            prev_no = prev.get('회차', '?')
+            if overlap_nums:
+                ov_balls = '  '.join(self._ball(n) for n in sorted(overlap_nums))
+                print(f"║  직전 대비  {prev_no}회와 {bold}{len(overlap_nums)}{reset}개 일치: {ov_balls}")
+            else:
+                print(f"║  직전 대비  {prev_no}회와 {gray}겹치는 번호 없음{reset}")
+
+        print("╚" + "═" * 62 + "╝")
+
+    # ── 최신 회차 분석 끝 ───────────────────────────────
+
     def analyze_winning_numbers(self):
         """1. 당첨번호 분석"""
         if not self.stat_analyzer or not self.stat_analyzer.historical_data:
             print("\n[WARN] 데이터가 없거나 로드되지 않았습니다. 메뉴 7번(데이터 수집)을 실행하거나 파일을 확인해주세요.")
             return
+
+        # 최신 회차 당첨번호 분석 (신규)
+        self._analyze_latest_round()
+
         print("\n[INFO] 당첨번호 분석 결과")
 
         trends = self.stat_analyzer.analyze_recent_trends(recent_count=20)
