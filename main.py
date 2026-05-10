@@ -743,7 +743,7 @@ class LottoSystem:
                     break
         return f"{color}{bold}{white} {number:2d} {reset}"
 
-    # ── 컬러 패턴 분석 ──────────────────────────────
+    # ── 종합 패턴 분석 ──────────────────────────────
 
     def _analyze_color_patterns(self, rows: list) -> dict:
         """최근 N회 데이터로 컬러 그룹별 패턴을 분석합니다.
@@ -1084,7 +1084,343 @@ class LottoSystem:
 
         print("└" + "─" * 62 + "┘")
 
-    # ── 컬러 패턴 분석 끝 ────────────────────────────
+    # ── 종합 패턴 분석 ──────────────────────────────
+
+    def _analyze_all_patterns(self, rows: list) -> dict:
+        """합계·홀짝·구간분포·연속번호·컬러·직전대비 종합 패턴 분석.
+
+        Returns dict with keys:
+          n_rounds, color (기존 _analyze_color_patterns 결과),
+          pick_counts (LRM 결정된 그룹별 픽수),
+          sum, odd, consec, section, prev_overlap
+        """
+        from collections import Counter
+        import statistics as _stats
+
+        if not rows:
+            return {}
+
+        # 기존 컬러 분석 재사용
+        color = self._analyze_color_patterns(rows)
+        recent5 = min(5, len(rows))
+
+        per_round: list = []
+        for rank, row in enumerate(rows):
+            nums = []
+            for i in range(1, 7):
+                try:
+                    nums.append(int(row[f'번호{i}']))
+                except (ValueError, TypeError):
+                    pass
+            nums.sort()
+            if len(nums) != 6:
+                continue
+
+            # 직전 회차 번호
+            prev_set: set = set()
+            if rank + 1 < len(rows):
+                for i in range(1, 7):
+                    try:
+                        prev_set.add(int(rows[rank + 1][f'번호{i}']))
+                    except (ValueError, TypeError):
+                        pass
+
+            per_round.append({
+                'sum':   sum(nums),
+                'odd':   sum(1 for n in nums if n % 2 != 0),
+                'consec': sum(1 for a, b in zip(nums, nums[1:]) if b - a == 1),
+                's1':    sum(1 for n in nums if  1 <= n <= 15),
+                's2':    sum(1 for n in nums if 16 <= n <= 30),
+                's3':    sum(1 for n in nums if 31 <= n <= 45),
+                'prev_overlap': len([n for n in nums if n in prev_set]),
+                'is_recent': rank < recent5,
+            })
+
+        n = len(per_round)
+        if n == 0:
+            return {'color': color, 'n_rounds': 0}
+
+        def _make_stat(key: str, threshold: float = 0.15) -> dict:
+            vals_all = [r[key] for r in per_round]
+            vals_rec = [r[key] for r in per_round if r['is_recent']]
+            avg_a = sum(vals_all) / len(vals_all)
+            avg_r = sum(vals_rec) / len(vals_rec) if vals_rec else avg_a
+            if avg_r > avg_a + threshold:
+                trend = '↑'
+            elif avg_r < avg_a - threshold:
+                trend = '↓'
+            else:
+                trend = '→'
+            return {'avg_all': avg_a, 'avg_recent': avg_r,
+                    'trend': trend, 'vals': vals_all}
+
+        sum_s    = _make_stat('sum',   threshold=5.0)
+        odd_s    = _make_stat('odd',   threshold=0.2)
+        consec_s = _make_stat('consec', threshold=0.2)
+        s1_s     = _make_stat('s1',   threshold=0.2)
+        s2_s     = _make_stat('s2',   threshold=0.2)
+        s3_s     = _make_stat('s3',   threshold=0.2)
+        prev_s   = _make_stat('prev_overlap', threshold=0.3)
+
+        # 합계 목표 범위
+        std_sum  = _stats.stdev(sum_s['vals']) if n >= 2 else 25.0
+        blend    = sum_s['avg_all'] * 0.5 + sum_s['avg_recent'] * 0.5
+        sum_lo   = max(21,  int(blend - std_sum * 0.6))
+        sum_hi   = min(279, int(blend + std_sum * 0.6))
+
+        # 홀수 목표
+        odd_target = round(odd_s['avg_all'] * 0.5 + odd_s['avg_recent'] * 0.5)
+
+        # 연속 목표: 가장 빈번한 값
+        consec_target = Counter(consec_s['vals']).most_common(1)[0][0]
+
+        # 구간 목표: blend 반올림 후 합=6 조정
+        raw_ts = [
+            s1_s['avg_all'] * 0.5 + s1_s['avg_recent'] * 0.5,
+            s2_s['avg_all'] * 0.5 + s2_s['avg_recent'] * 0.5,
+            s3_s['avg_all'] * 0.5 + s3_s['avg_recent'] * 0.5,
+        ]
+        t_floors = [int(v) for v in raw_ts]
+        deficit  = 6 - sum(t_floors)
+        order    = sorted(range(3), key=lambda i: raw_ts[i] - t_floors[i], reverse=True)
+        for i in range(max(0, deficit)):
+            t_floors[order[i % 3]] += 1
+        t_s1, t_s2, t_s3 = t_floors
+
+        # 컬러 그룹 픽수 (LRM, _recommend_by_color_pattern과 동일 로직)
+        groups = color['groups']
+        raw_picks: dict = {}
+        for name, info in groups.items():
+            a, r = info['avg_all'], info['avg_recent']
+            if info['trend'] == '↑':
+                raw_picks[name] = a * 0.4 + r * 0.6
+            elif info['trend'] == '↓':
+                raw_picks[name] = a * 0.6 + r * 0.4
+            else:
+                raw_picks[name] = (a + r) / 2.0
+
+        floors_c   = {name: int(v) for name, v in raw_picks.items()}
+        remainders = sorted(raw_picks.items(),
+                            key=lambda x: x[1] - int(x[1]), reverse=True)
+        deficit_c  = 6 - sum(floors_c.values())
+        pick_counts: dict = dict(floors_c)
+        for i in range(max(0, deficit_c)):
+            pick_counts[remainders[i % len(remainders)][0]] += 1
+
+        return {
+            'n_rounds':  n,
+            'color':     color,
+            'pick_counts': pick_counts,
+            'sum':    {**sum_s,    'std': std_sum, 'blend': blend,
+                       'target_lo': sum_lo, 'target_hi': sum_hi},
+            'odd':    {**odd_s,    'target': odd_target},
+            'consec': {**consec_s, 'target': consec_target},
+            'section': {
+                's1': s1_s, 's2': s2_s, 's3': s3_s,
+                'target_s1': t_s1, 'target_s2': t_s2, 'target_s3': t_s3,
+            },
+            'prev_overlap': prev_s,
+        }
+
+    def _recommend_by_all_patterns(self, analysis: dict,
+                                   prev_nums: set | None = None) -> tuple:
+        """종합 패턴 기반 번호 추천.
+
+        알고리즘:
+          1. 컬러 픽수(pick_counts)에 따라 그룹별 후보 조합 생성 (top-6)
+          2. itertools.product로 전체 조합 열거
+          3. 합계·홀짝·구간·연속번호·가중빈도 5개 지표 점수 합산
+          4. 직전 회차 ≤1 제한 적용 후 최고 점수 조합 반환
+
+        Returns:
+            (sorted_numbers: list[int], pick_counts: dict[str, int])
+        """
+        import itertools
+
+        if not analysis or not analysis.get('color'):
+            return [], {}
+
+        color       = analysis['color']
+        groups      = color['groups']
+        num_weight  = color['num_weight']
+        pick_counts = analysis['pick_counts']
+
+        blend      = analysis['sum']['blend']
+        sum_lo     = analysis['sum']['target_lo']
+        sum_hi     = analysis['sum']['target_hi']
+        odd_target = analysis['odd']['target']
+        c_target   = analysis['consec']['target']
+        t_s1       = analysis['section']['target_s1']
+        t_s2       = analysis['section']['target_s2']
+        t_s3       = analysis['section']['target_s3']
+
+        TOP_K = 6   # 그룹당 후보 번호 수
+
+        # 그룹별 조합 목록
+        group_combos: list = []
+        for name, _lo, _hi, _ in self._COLOR_GROUPS:
+            cnt  = pick_counts.get(name, 0)
+            pool = groups[name]['all_nums'][:TOP_K]
+            if cnt == 0 or cnt > len(pool):
+                group_combos.append([tuple(pool[:cnt]) if cnt <= len(pool) else tuple()])
+            else:
+                group_combos.append(list(itertools.combinations(pool, cnt)))
+
+        best       = None
+        best_score = float('-inf')
+
+        for product_combo in itertools.product(*group_combos):
+            nums: list = []
+            for grp in product_combo:
+                nums.extend(grp)
+
+            if len(set(nums)) != 6:
+                continue
+
+            nums_s = sorted(nums)
+
+            # 직전 회차 ≤1 제한
+            if prev_nums and sum(1 for n in nums_s if n in prev_nums) > 1:
+                continue
+
+            # 5개 지표 채점
+            total  = sum(nums_s)
+            odd    = sum(1 for n in nums_s if n % 2 != 0)
+            consec = sum(1 for a, b in zip(nums_s, nums_s[1:]) if b - a == 1)
+            s1     = sum(1 for n in nums_s if  1 <= n <= 15)
+            s2     = sum(1 for n in nums_s if 16 <= n <= 30)
+            s3     = sum(1 for n in nums_s if 31 <= n <= 45)
+
+            score = 0.0
+            score += 3.0 if sum_lo <= total <= sum_hi \
+                         else -min(3.0, abs(total - blend) / 20.0)    # 합계
+            score -= abs(odd - odd_target) * 1.2                      # 홀짝
+            score += 1.0 if consec == c_target \
+                         else -abs(consec - c_target) * 0.6           # 연속
+            score -= (abs(s1 - t_s1) + abs(s2 - t_s2)
+                      + abs(s3 - t_s3)) * 0.4                         # 구간
+            score += sum(num_weight.get(n, 0) for n in nums_s) * 0.2  # 가중빈도
+
+            if score > best_score:
+                best_score = score
+                best       = nums_s
+
+        # 폴백: 모든 조합이 직전 회차 제한에 걸릴 때
+        if best is None:
+            best, _ = self._recommend_by_color_pattern(color, prev_nums)
+
+        return best, pick_counts
+
+    def _print_all_pattern_analysis(self, analysis: dict,
+                                    recommended: list, prev_nums: set):
+        """종합 패턴 분석 테이블 + 추천번호를 출력합니다."""
+        if not analysis:
+            return
+
+        reset  = '\033[0m'
+        bold   = '\033[1m'
+        white  = '\033[97m'
+        gray   = '\033[90m'
+        green  = '\033[92m'
+        yellow = '\033[93m'
+
+        def tc(t):   # trend color
+            return green if t == '↑' else ('\033[91m' if t == '↓' else yellow)
+
+        def chk(ok): # ✓ / △
+            return f"{green}✓{reset}" if ok else f"{yellow}△{reset}"
+
+        n = analysis['n_rounds']
+        print()
+        print("╔" + "═" * 66 + "╗")
+        print(f"║{bold}  종합 패턴 분석  (최근 {n}회 기준){reset}")
+        print("╠" + "═" * 66 + "╣")
+        hdr = (f"  {'패턴':<13} {'전체평균':>8} {'최근5회':>8}"
+               f"  {'트렌드':>5}   이번회차 목표")
+        print(f"║{hdr}")
+        print("╠" + "─" * 66 + "╣")
+
+        # ── 합계
+        s = analysis['sum']
+        print(f"║  {'합계':<13} {s['avg_all']:>8.1f} {s['avg_recent']:>8.1f}"
+              f"  {tc(s['trend'])}{s['trend']}{reset}   "
+              f"{s['target_lo']} ~ {s['target_hi']}")
+
+        # ── 홀수 개수
+        o = analysis['odd']
+        print(f"║  {'홀수 개수':<12} {o['avg_all']:>8.2f} {o['avg_recent']:>8.2f}"
+              f"  {tc(o['trend'])}{o['trend']}{reset}   {o['target']}개")
+
+        # ── 구간별
+        sec = analysis['section']
+        for label, key, tkey in [('1구간(1-15)',  's1', 'target_s1'),
+                                  ('2구간(16-30)', 's2', 'target_s2'),
+                                  ('3구간(31-45)', 's3', 'target_s3')]:
+            st = sec[key]
+            print(f"║  {label:<13} {st['avg_all']:>8.2f} {st['avg_recent']:>8.2f}"
+                  f"  {tc(st['trend'])}{st['trend']}{reset}   {sec[tkey]}개")
+
+        # ── 연속번호
+        c = analysis['consec']
+        print(f"║  {'연속번호 쌍':<12} {c['avg_all']:>8.2f} {c['avg_recent']:>8.2f}"
+              f"  {tc(c['trend'])}{c['trend']}{reset}   {c['target']}쌍")
+
+        # ── 직전회차 겹침
+        p = analysis['prev_overlap']
+        print(f"║  {'직전회차 겹침':<11} {p['avg_all']:>8.2f} {p['avg_recent']:>8.2f}"
+              f"  {tc(p['trend'])}{p['trend']}{reset}   ≤1개 {gray}(강제 적용){reset}")
+
+        print("╠" + "─" * 66 + "╣")
+
+        # ── 컬러 그룹
+        color       = analysis['color']
+        pick_counts = analysis['pick_counts']
+        hdr2 = (f"  {'컬러 그룹':<13} {'전체평균':>8} {'최근5회':>8}"
+                f"  {'트렌드':>5}   픽수")
+        print(f"║{hdr2}")
+        print("╠" + "─" * 66 + "╣")
+        for name, lo, hi, gcol in self._COLOR_GROUPS:
+            info  = color['groups'][name]
+            label = f"{gcol}{bold}{white}{name}{reset}"
+            cnt   = pick_counts.get(name, 0)
+            print(f"║  {label}  {lo:2d}~{hi:2d}  "
+                  f"{info['avg_all']:>7.2f}  {info['avg_recent']:>7.2f}"
+                  f"  {tc(info['trend'])}{info['trend']}{reset}    {cnt}개")
+
+        print("╠" + "═" * 66 + "╣")
+
+        # ── 추천번호
+        balls_str = "  ".join(self._ball(n) for n in recommended)
+        print(f"║  {bold}이번 회차 추천 번호{reset}  {gray}(종합 패턴 기반){reset}")
+        print(f"║")
+        print(f"║   {balls_str}")
+
+        # 목표 충족 검증
+        if recommended:
+            total  = sum(recommended)
+            odd    = sum(1 for n in recommended if n % 2 != 0)
+            consec = sum(1 for a, b in zip(recommended, recommended[1:]) if b - a == 1)
+            s1     = sum(1 for n in recommended if  1 <= n <= 15)
+            s2     = sum(1 for n in recommended if 16 <= n <= 30)
+            s3     = sum(1 for n in recommended if 31 <= n <= 45)
+            ov     = sum(1 for n in recommended if n in prev_nums) if prev_nums else 0
+
+            s_ok = analysis['sum']['target_lo'] <= total <= analysis['sum']['target_hi']
+            o_ok = odd    == analysis['odd']['target']
+            c_ok = consec <= analysis['consec']['target'] + 1
+            p_ok = ov <= 1
+
+            print(f"║")
+            print(f"║   합계 {bold}{total}{reset} {chk(s_ok)}"
+                  f"   홀수 {bold}{odd}{reset}개 {chk(o_ok)}"
+                  f"   구간 {bold}{s1}/{s2}/{s3}{reset}"
+                  f"   연속 {bold}{consec}{reset}쌍 {chk(c_ok)}"
+                  f"   직전겹침 {bold}{ov}{reset}개 {chk(p_ok)}")
+
+        print(f"║")
+        print("╚" + "═" * 66 + "╝")
+
+    # ── 종합 패턴 분석 끝 ────────────────────────────
 
     def _format_prize(self, amount_won: str) -> str:
         """당첨금액을 억 단위 문자열로 변환합니다. (예: '1860000000' → '18.6억')"""
@@ -1200,16 +1536,16 @@ class LottoSystem:
                         except (ValueError, TypeError):
                             pass
 
-                # 컬러 패턴 분석 + 추천
+                # 종합 패턴 분석 + 추천
                 if n < 5:
                     print("  [INFO] 패턴 분석은 5회 이상 데이터에서 더 정확합니다.")
-                analysis  = self._analyze_color_patterns(target_rows)
-                rec_nums, pick_counts = self._recommend_by_color_pattern(
-                    analysis, prev_nums=prev_nums
+                analysis_all = self._analyze_all_patterns(target_rows)
+                rec_nums, pick_counts = self._recommend_by_all_patterns(
+                    analysis_all, prev_nums=prev_nums
                 )
-                self._print_color_analysis(analysis, rec_nums, pick_counts)
+                self._print_all_pattern_analysis(analysis_all, rec_nums, prev_nums)
                 self._print_recommendation_reasons(
-                    analysis, rec_nums, pick_counts, prev_nums
+                    analysis_all['color'], rec_nums, pick_counts, prev_nums
                 )
 
                 # 저장 여부
