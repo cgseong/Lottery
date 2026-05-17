@@ -23,9 +23,6 @@ pip install -r requirements.txt
 
 # 실행
 python main.py
-
-# 대시보드 (선택)
-streamlit run dashboard_app.py
 ```
 
 ## 프로젝트 구조
@@ -35,7 +32,6 @@ Lottery/
 ├── main.py                  # 진입점 (메뉴 시스템)
 ├── ai_pattern_learner.py    # ML 기반 번호 확률 예측
 ├── number_storage.py        # 번호 조합 저장/관리
-├── dashboard_app.py         # Streamlit 대시보드
 │
 ├── analyzers/
 │   ├── comprehensive_analyzer.py    # 10개 지표 종합 분석

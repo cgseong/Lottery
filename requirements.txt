@@ -14,8 +14,5 @@ joblib>=1.1.0
 matplotlib>=3.3.0
 seaborn>=0.11.0
 
-# 대시보드 (선택)
-streamlit>=1.37.0
-
 # 테스트
 pytest>=8.0.0
