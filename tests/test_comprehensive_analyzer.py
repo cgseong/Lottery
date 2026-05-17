@@ -21,7 +21,7 @@ def test_compute_score_range(sample_data):
 
 def test_generate_recommendations_structure(sample_data):
     ca = ComprehensiveAnalyzer(sample_data)
-    recs = ca.generate_recommendations(num_recommendations=3, sample_size=500)
+    recs = ca.generate_recommendations(num_recommendations=3, sample_size=500, seed=42)
     assert isinstance(recs, list)
     for rec in recs:
         assert 'numbers' in rec
@@ -34,7 +34,7 @@ def test_exclude_numbers_respected(sample_data):
     exclude = {1, 2, 3}
     ca = ComprehensiveAnalyzer(sample_data)
     recs = ca.generate_recommendations(
-        num_recommendations=5, sample_size=2000, exclude_numbers=exclude
+        num_recommendations=5, sample_size=2000, exclude_numbers=exclude, seed=42
     )
     for rec in recs:
         assert not (set(rec['numbers']) & exclude)

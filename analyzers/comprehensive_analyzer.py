@@ -256,8 +256,13 @@ class ComprehensiveAnalyzer:
         sample_size: int = 30_000,
         exclude_numbers: Optional[set] = None,
         diversity_threshold: float = 0.40,
+        seed: Optional[int] = None,
     ) -> List[Dict]:
-        """10개 지표 종합 점수 기준 추천 조합 목록 반환"""
+        """10개 지표 종합 점수 기준 추천 조합 목록 반환
+
+        Args:
+            seed: 난수 시드. None이면 매번 다른 결과, 정수를 주면 재현 가능.
+        """
         if not len(self._data_matrix):
             return []
 
@@ -266,7 +271,7 @@ class ComprehensiveAnalyzer:
             return []
 
         p = self._number_sampling_weights(exclude)
-        rng = np.random.default_rng(seed=42)
+        rng = np.random.default_rng(seed=seed)
 
         seen: set = set()
         scored: List[tuple] = []
