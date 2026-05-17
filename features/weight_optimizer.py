@@ -7,9 +7,16 @@ from utils.logging_config import get_logger
 
 _log = get_logger(__name__)
 
-# 탐색할 가중치 조합 후보
+# scipy 선택적 의존성 (없으면 그리드 서치로 폴백)
+try:
+    from scipy.optimize import differential_evolution
+    _HAS_SCIPY = True
+except ImportError:
+    _HAS_SCIPY = False
+
+# 그리드 서치용 후보 가중치 (scipy 없을 때 폴백)
 _WEIGHT_CANDIDATES: List[Dict[str, float]] = [
-    {'frequency': 0.45, 'sum': 0.20, 'trend': 0.20, 'distribution': 0.15},  # 기본값
+    {'frequency': 0.45, 'sum': 0.20, 'trend': 0.20, 'distribution': 0.15},
     {'frequency': 0.50, 'sum': 0.20, 'trend': 0.15, 'distribution': 0.15},
     {'frequency': 0.40, 'sum': 0.25, 'trend': 0.20, 'distribution': 0.15},
     {'frequency': 0.45, 'sum': 0.15, 'trend': 0.25, 'distribution': 0.15},
@@ -25,10 +32,11 @@ _WEIGHT_CANDIDATES: List[Dict[str, float]] = [
 class WeightOptimizer:
     """백테스트 결과를 기반으로 최적 점수 가중치를 탐색합니다.
 
-    동작 방식:
-    1. 학습 데이터(전체 - 검증 구간)로 후보 조합 200개 생성
-    2. 검증 구간(마지막 N 회차)의 실제 당첨번호와 비교
-    3. 각 가중치 조합으로 후보를 재점수화하여 3매치 이상 비율이 가장 높은 가중치 반환
+    scipy가 설치되어 있으면 differential_evolution으로 연속 공간 탐색,
+    없으면 기존 그리드 서치로 폴백합니다.
+
+    Rolling Optimization: 여러 검증 구간을 슬라이딩하여
+    과적합을 방지하고 안정적인 최적 가중치를 도출합니다.
     """
 
     def __init__(self, historical_data: List[Dict], test_rounds: int = 40):
@@ -42,13 +50,134 @@ class WeightOptimizer:
             _log.warning("데이터가 부족합니다 (최소 %d회차 필요). 기본 가중치 사용.", min_required)
             return dict(_DEFAULT_SCORE_WEIGHTS)
 
-        # 학습 / 검증 분리
+        if _HAS_SCIPY:
+            return self._optimize_scipy()
+        else:
+            _log.info("scipy 미설치 — 그리드 서치로 최적화합니다.")
+            return self._optimize_grid()
+
+    def _optimize_scipy(self) -> Dict[str, float]:
+        """scipy differential_evolution 기반 연속 공간 최적화.
+
+        Rolling window: 50회차 간격으로 슬라이딩하며 각 구간의
+        3매치 비율을 합산 → 전체 구간에 걸쳐 안정적인 가중치 도출.
+        """
+        _log.info("differential_evolution 기반 롤링 최적화 시작")
+
+        # 학습 데이터 / 검증 데이터 분리 (최소 50회 간격)
+        data = self.historical_data
+        n = len(data)
+        window_size = min(self.test_rounds, 40)
+        step = max(20, window_size // 2)
+
+        # 롤링 검증 구간들: [(train_end, test_start, test_end), ...]
+        validation_splits = []
+        for test_end_offset in range(window_size, min(n - 50, window_size * 4), step):
+            test_end = n - (test_end_offset - window_size)
+            test_start = test_end - window_size
+            if test_start < 50:
+                break
+            validation_splits.append((test_start, test_start, test_end))
+
+        if not validation_splits:
+            validation_splits = [(n - self.test_rounds, n - self.test_rounds, n)]
+
+        _log.info("롤링 검증 구간 %d개 사용", len(validation_splits))
+
+        # 기본 분석기로 후보 조합 사전 생성 (전체 학습 데이터 기반)
+        train_cutoff = validation_splits[0][0]
+        base_analyzer = StatisticalAnalyzer(data[:train_cutoff])
+        base_analyzer.analyze_frequency()
+        base_analyzer.analyze_sum_range()
+        base_analyzer.analyze_recent_trends()
+
+        candidates = base_analyzer.generate_recommendations(
+            num_recommendations=80, verbose=False
+        ) + base_analyzer.generate_unique_recommendations(
+            num_recommendations=80
+        )
+        candidate_numbers = [c['numbers'] for c in candidates]
+
+        if not candidate_numbers:
+            _log.warning("후보 조합 생성 실패. 기본 가중치 사용.")
+            return dict(_DEFAULT_SCORE_WEIGHTS)
+
+        def objective(params):
+            """목적함수: -3매치율 (최소화)"""
+            raw = params[:4]
+            total = sum(raw)
+            if total <= 0:
+                return 1.0
+            w = {
+                'frequency': raw[0] / total,
+                'sum': raw[1] / total,
+                'trend': raw[2] / total,
+                'distribution': raw[3] / total,
+            }
+
+            hits = 0
+            total_evals = 0
+
+            for _, test_start, test_end in validation_splits:
+                test_data = data[test_start:test_end]
+
+                for actual_row in test_data:
+                    try:
+                        actual = {int(actual_row[f'번호{j}']) for j in range(1, 7)}
+                    except (KeyError, ValueError):
+                        continue
+
+                    scored = sorted(
+                        candidate_numbers,
+                        key=lambda nums, _w=w: base_analyzer.calculate_score(nums, _w),
+                        reverse=True
+                    )
+                    for nums in scored[:3]:
+                        if len(set(nums) & actual) >= 3:
+                            hits += 1
+                        total_evals += 1
+
+            rate = hits / max(1, total_evals)
+            return -rate  # 최소화이므로 음수
+
+        # 탐색 범위: 각 가중치 0.05 ~ 0.70
+        bounds = [(0.05, 0.70)] * 4
+
+        result = differential_evolution(
+            objective,
+            bounds,
+            seed=42,
+            maxiter=50,
+            tol=1e-4,
+            polish=False,
+            init='sobol',
+        )
+
+        raw = result.x
+        total = sum(raw)
+        best_weights = {
+            'frequency': round(raw[0] / total, 4),
+            'sum': round(raw[1] / total, 4),
+            'trend': round(raw[2] / total, 4),
+            'distribution': round(raw[3] / total, 4),
+        }
+        best_rate = -result.fun
+
+        _log.info(
+            "최적 가중치 (DE): frequency=%.3f, sum=%.3f, trend=%.3f, distribution=%.3f  3매치율=%.4f",
+            best_weights['frequency'], best_weights['sum'],
+            best_weights['trend'], best_weights['distribution'], best_rate
+        )
+
+        return best_weights
+
+    def _optimize_grid(self) -> Dict[str, float]:
+        """그리드 서치 기반 최적화 (scipy 없을 때 폴백)."""
         train_data = self.historical_data[:-self.test_rounds]
         test_data = self.historical_data[-self.test_rounds:]
 
         _log.info("학습 데이터: %d회차 / 검증 데이터: %d회차", len(train_data), len(test_data))
 
-        # 기본 분석기로 후보 조합 생성 (가중치 탐색에 공통 사용)
         base_analyzer = StatisticalAnalyzer(train_data)
         base_analyzer.analyze_frequency()
         base_analyzer.analyze_sum_range()
@@ -81,7 +210,6 @@ class WeightOptimizer:
                 except (KeyError, ValueError):
                     continue
 
-                # 해당 가중치로 모든 후보 재점수화 후 상위 3개 추출
                 scored = sorted(
                     candidate_numbers,
                     key=lambda nums: base_analyzer.calculate_score(nums, w_combo),

@@ -188,17 +188,33 @@ class ComprehensiveAnalyzer:
         return float(_CONSEC_SCORES.get(pairs, 0.05))
 
     def _ind_cooccurrence(self, numbers: List[int]) -> float:
-        """지표 8: 번호 쌍 공동 출현 — 무작위 기댓값 대비 실제 비율"""
+        """지표 8: 조건부 확률 기반 번호 쌍 공동 출현.
+
+        P(B|A) = count(A∩B) / count(A) 를 활용하여
+        단순 공동출현 횟수 대신 조건부 확률로 평가합니다.
+        """
         n = len(self._data_matrix)
         if n == 0:
             return 0.5
-        expected = n * (6.0 / 45.0) * (5.0 / 44.0)
+
         total = 0.0
         cnt = 0
         for a, b in combinations(numbers, 2):
-            total += float(self._cooccur[a][b]) / max(1.0, expected)
+            freq_a = float(self._freq[a])
+            freq_b = float(self._freq[b])
+            co_ab = float(self._cooccur[a][b])
+            if freq_a > 0 and freq_b > 0:
+                # P(B|A) + P(A|B) 의 평균 → 쌍의 조건부 연관도
+                cond_prob = (co_ab / freq_a + co_ab / freq_b) / 2.0
+                total += cond_prob
             cnt += 1
-        return float(min(1.0, total / max(1, cnt) / 3.0))
+
+        if cnt == 0:
+            return 0.5
+        # 기대값: 각 번호가 독립이면 P(B|A) ≈ 6/45 ≈ 0.133
+        expected = 6.0 / 45.0
+        avg_cond = total / cnt
+        return float(min(1.0, avg_cond / (expected * 2.5)))
 
     def _ind_last_digit_diversity(self, numbers: List[int]) -> float:
         """지표 9: 일의 자리 숫자 다양성 (6개 모두 다르면 만점)"""

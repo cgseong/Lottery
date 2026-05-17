@@ -44,6 +44,11 @@ class AIPatternLearner:
         self.use_pca = use_pca
         self.pca_components = pca_components
         self._pca: Optional[PCA] = None
+        # 앙상블: 여러 윈도우 크기로 학습하여 소프트 보팅
+        self._ensemble_windows: List[int] = [3, 5, 10]
+        self._ensemble_models: List = []
+        self._ensemble_pcas: List = []
+        self._ensemble_last_seens: List = []
         
     def load_data(self) -> Optional[pd.DataFrame]:
         """데이터를 로드하고 시간순(회차 오름차순)으로 정렬합니다."""
@@ -160,47 +165,78 @@ class AIPatternLearner:
         return np.array(X), np.array(y), last_seen
 
     def train_models(self) -> bool:
-        """Multi-label 분류 모델(Boosting 기반)을 학습시킵니다."""
-        _log.info("AI 모델 학습 시작 (파생 피처 및 Multi-Label 적용)")
+        """Multi-label 분류 모델(Boosting 기반)을 학습시킵니다.
+
+        윈도우 크기 [3, 5, 10]의 앙상블 모델을 학습하여 소프트 보팅합니다.
+        """
+        _log.info("AI 모델 학습 시작 (앙상블 + 파생 피처 및 Multi-Label 적용)")
 
         df = self.load_data()
-        if df is None or len(df) <= self.window_size:
+        if df is None or len(df) <= max(self._ensemble_windows):
             _log.warning("데이터 로드 실패 또는 데이터 양이 너무 적습니다.")
             return False
 
-        X, y, self.last_seen = self.prepare_dataset(df)
+        # 앙상블: 여러 윈도우 크기로 학습
+        self._ensemble_models = []
+        self._ensemble_pcas = []
+        self._ensemble_last_seens = []
 
-        # 모델 검증을 위해 9:1로 데이터 분할
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
+        for ws in self._ensemble_windows:
+            self.window_size = ws
+            X, y, last_seen = self.prepare_dataset(df)
 
-        # PCA 차원 축소 (선택)
-        if self.use_pca:
-            n_comp = min(self.pca_components, X_train.shape[1], X_train.shape[0])
-            self._pca = PCA(n_components=n_comp, random_state=42)
-            X_train = self._pca.fit_transform(X_train)
-            X_test = self._pca.transform(X_test)
-            _log.info("PCA 적용: %d차원 → %d차원", X.shape[1], n_comp)
+            if len(X) < 10:
+                _log.warning("윈도우 %d: 데이터 부족, 건너뜀", ws)
+                continue
 
-        _log.info("HistGradientBoostingClassifier (LightGBM 호환) 에 MultiOutput 학습 중...")
-        try:
-            base_estimator = HistGradientBoostingClassifier(max_iter=100, random_state=42)
-            self.model = MultiOutputClassifier(base_estimator)
-            self.model.fit(X_train, y_train)
-        except Exception as e:
-            _log.warning("내장 Boosting 모델 학습 실패, RandomForest로 대체합니다: %s", e)
-            self.model = RandomForestClassifier(n_estimators=100, random_state=42)
-            self.model.fit(X_train, y_train)
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.1, random_state=42
+            )
 
-        # 테스트셋으로 모델 검증
-        try:
-            y_pred = self.model.predict(X_test)
-            avg_accuracy = float(np.mean(y_pred == y_test))
-            _log.info("검증 정확도 (번호별 평균): %.4f", avg_accuracy)
-        except Exception as e:
-            _log.warning("모델 검증 중 오류 (학습은 완료됨): %s", e)
+            pca = None
+            if self.use_pca:
+                n_comp = min(self.pca_components, X_train.shape[1], X_train.shape[0])
+                pca = PCA(n_components=n_comp, random_state=42)
+                X_train = pca.fit_transform(X_train)
+                X_test = pca.transform(X_test)
+                _log.info("윈도우 %d — PCA: %d차원 → %d차원", ws, X.shape[1], n_comp)
+
+            try:
+                base_estimator = HistGradientBoostingClassifier(max_iter=100, random_state=42)
+                model = MultiOutputClassifier(base_estimator)
+                model.fit(X_train, y_train)
+            except Exception as e:
+                _log.warning("윈도우 %d Boosting 실패, RF 대체: %s", ws, e)
+                model = MultiOutputClassifier(
+                    RandomForestClassifier(n_estimators=100, random_state=42)
+                )
+                model.fit(X_train, y_train)
+
+            self._ensemble_models.append(model)
+            self._ensemble_pcas.append(pca)
+            self._ensemble_last_seens.append(last_seen)
+
+            # 검증
+            try:
+                y_pred = model.predict(X_test)
+                acc = float(np.mean(y_pred == y_test))
+                _log.info("윈도우 %d — 검증 정확도: %.4f", ws, acc)
+            except Exception:
+                pass
+
+        if not self._ensemble_models:
+            _log.warning("앙상블 모델 학습 실패")
+            return False
+
+        # 기본 모델은 window_size=5(인덱스 1)로 설정
+        primary_idx = min(1, len(self._ensemble_models) - 1)
+        self.model = self._ensemble_models[primary_idx]
+        self._pca = self._ensemble_pcas[primary_idx]
+        self.last_seen = self._ensemble_last_seens[primary_idx]
+        self.window_size = self._ensemble_windows[primary_idx] if primary_idx < len(self._ensemble_windows) else 5
 
         self.is_trained = True
-        _log.info("모델 학습 완료")
+        _log.info("앙상블 모델 학습 완료 (%d개 모델)", len(self._ensemble_models))
         return True
 
     def _get_current_features(self, df: pd.DataFrame) -> np.ndarray:
@@ -251,7 +287,7 @@ class AIPatternLearner:
         ]).reshape(1, -1)
 
     def predict_next(self) -> Optional[List[int]]:
-        """가장 확률이 높은 6개의 다음 회차 당첨 번호를 예측합니다."""
+        """앙상블 소프트 보팅으로 가장 확률이 높은 6개의 다음 회차 당첨 번호를 예측합니다."""
         if not self.is_trained:
             if not self.train_models():
                 return None
@@ -259,30 +295,64 @@ class AIPatternLearner:
         df = self.load_data()
         if df is None:
             return None
-            
+
+        # 앙상블 소프트 보팅: 각 모델의 확률을 합산
+        ensemble_probs = np.zeros(45, dtype=float)
+        n_models = 0
+
+        for idx, model in enumerate(self._ensemble_models):
+            ws = self._ensemble_windows[idx] if idx < len(self._ensemble_windows) else 5
+            pca = self._ensemble_pcas[idx] if idx < len(self._ensemble_pcas) else None
+            last_seen = self._ensemble_last_seens[idx] if idx < len(self._ensemble_last_seens) else self.last_seen
+
+            # 해당 윈도우 크기로 피처 생성
+            old_ws = self.window_size
+            old_ls = self.last_seen
+            self.window_size = ws
+            self.last_seen = last_seen
+
+            try:
+                X_pred = self._get_current_features(df)
+                if pca is not None:
+                    X_pred = pca.transform(X_pred)
+
+                proba_list = model.predict_proba(X_pred)
+                for i in range(45):
+                    prob = proba_list[i][0, 1] if proba_list[i].shape[1] > 1 else 0.0
+                    ensemble_probs[i] += prob
+                n_models += 1
+            except Exception as e:
+                _log.debug("앙상블 모델 %d 예측 실패: %s", idx, e)
+            finally:
+                self.window_size = old_ws
+                self.last_seen = old_ls
+
+        if n_models == 0:
+            # 폴백: 기본 모델 단독 사용
+            return self._predict_single(df)
+
+        # 평균 확률로 상위 6개 선택
+        avg_probs = ensemble_probs / n_models
+        top_6_indices = np.argsort(avg_probs)[-6:]
+        predicted_numbers = sorted([int(idx) + 1 for idx in top_6_indices])
+        return predicted_numbers
+
+    def _predict_single(self, df) -> Optional[List[int]]:
+        """단일 모델 예측 (폴백용)."""
         X_pred = self._get_current_features(df)
         if self.use_pca and self._pca is not None:
             X_pred = self._pca.transform(X_pred)
 
         try:
-            # 예측 확률 리스트 가져오기 (각 번호 1~45에 대해 1이 나올 확률을 추적)
             proba_list = self.model.predict_proba(X_pred)
-            
             probabilities = []
             for i in range(45):
-                # 타겟 데이터(해당 번호)에 클래스가 (0, 1) 두 개면 shape[1] > 1, 만약 0만 있었으면 shape[1] == 1 임을 방어
-                # proba_list는 [array([[P(0), P(1)]]), array([[P(0), P(1)]]), ...] 형식을 띔
                 prob = proba_list[i][0, 1] if proba_list[i].shape[1] > 1 else 0.0
                 probabilities.append(prob)
-                
-            # 확률 오름차순 시 가장 마지막 6개의 인덱스 추출
             top_6_indices = np.argsort(probabilities)[-6:]
-            # 0번 인덱스가 숫자 1을 의미하므로 + 1
-            predicted_numbers = sorted([int(idx) + 1 for idx in top_6_indices])
-            return predicted_numbers
-            
+            return sorted([int(idx) + 1 for idx in top_6_indices])
         except Exception as e:
-            _log.warning("예측 계산 중 오류: %s", e)
+            _log.warning("단일 모델 예측 오류: %s", e)
             return None
 
     def calculate_combination_probability(self, combinations: List[List[int]]) -> List[float]:

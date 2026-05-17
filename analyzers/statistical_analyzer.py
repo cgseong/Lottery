@@ -96,7 +96,7 @@ class StatisticalAnalyzer:
         return self.recent_trends
 
     def analyze_frequency(self) -> Dict:
-        """번호별 출현 빈도를 분석합니다."""
+        """번호별 출현 빈도를 분석합니다 (시간 가중 빈도 포함)."""
         if not self.historical_data:
             return {}
 
@@ -106,8 +106,23 @@ class StatisticalAnalyzer:
             all_numbers.extend(numbers)
 
         frequency = Counter(all_numbers)
+
+        # 시간 가중 빈도: 최근 회차일수록 가중치를 높이는 지수감소 빈도
+        import math
+        sorted_data = sorted(self.historical_data, key=self._get_round_value)
+        n = len(sorted_data)
+        decay_lambda = 0.007  # 감소율 — 약 100회 전 데이터는 50% 가중치
+        weighted_freq: Dict[int, float] = {num: 0.0 for num in range(1, MAX_LOTTO_NUMBER + 1)}
+        for i, data in enumerate(sorted_data):
+            weight = math.exp(-decay_lambda * (n - 1 - i))
+            numbers = self._extract_numbers(data)
+            for num in numbers:
+                if 1 <= num <= MAX_LOTTO_NUMBER:
+                    weighted_freq[num] += weight
+
         self.frequency_analysis = {
             'frequency': dict(frequency),
+            'weighted_frequency': weighted_freq,
             'most_common': frequency.most_common(10),
             'least_common': frequency.most_common()[:-11:-1]
         }
@@ -377,17 +392,24 @@ class StatisticalAnalyzer:
 
         score = 0.0
 
-        # 빈도 기반 점수
+        # 빈도 기반 점수 (시간 가중 빈도 활용)
         frequency = self.frequency_analysis.get('frequency', {})
+        weighted_freq = self.frequency_analysis.get('weighted_frequency', {})
         total_draws = len(self.historical_data)
 
         if total_draws == 0:
             return 0.0
 
-        for num in numbers:
-            freq = frequency.get(num, 0)
-            score += freq / total_draws
-        frequency_score = score / max(1, len(numbers))
+        # 시간 가중 빈도가 있으면 사용, 없으면 일반 빈도로 폴백
+        if weighted_freq:
+            w_max = max(weighted_freq.values()) if weighted_freq else 1.0
+            freq_scores = [weighted_freq.get(num, 0.0) / max(w_max, 1.0) for num in numbers]
+            frequency_score = sum(freq_scores) / max(1, len(numbers))
+        else:
+            for num in numbers:
+                freq = frequency.get(num, 0)
+                score += freq / total_draws
+            frequency_score = score / max(1, len(numbers))
 
         # 합계 기반 점수
         sum_score = 0.0
