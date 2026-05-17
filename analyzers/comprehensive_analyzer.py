@@ -229,16 +229,31 @@ class ComprehensiveAnalyzer:
     # ------------------------------------------------------------------
 
     def _number_sampling_weights(self, exclude: set) -> np.ndarray:
-        """번호 1~45의 샘플링 확률 벡터 (인덱스 i → 번호 i+1)"""
+        """번호 1~45의 샘플링 확률 벡터 (인덱스 i → 번호 i+1)
+
+        self.weights에서 개별 번호에 적용 가능한 4개 지표
+        (frequency, recent_trend, cold_period, prize_sharing)의 가중치를
+        추출·정규화하여 사용합니다. 따라서 self.weights를 변경하면
+        샘플링 확률도 자동으로 연동됩니다.
+        """
+        # self.weights에서 개별 번호 수준 지표 가중치를 추출하여 정규화
+        _INDIVIDUAL_KEYS = ('frequency', 'recent_trend', 'cold_period', 'prize_sharing')
+        raw_w = {k: self.weights.get(k, 0.0) for k in _INDIVIDUAL_KEYS}
+        w_total = sum(raw_w.values()) or 1.0
+        w_freq  = raw_w['frequency']    / w_total
+        w_trend = raw_w['recent_trend'] / w_total
+        w_cold  = raw_w['cold_period']  / w_total
+        w_prize = raw_w['prize_sharing'] / w_total
+
         raw = np.zeros(45, dtype=float)
         for n in range(1, _NUM_BALLS + 1):
             if n in exclude:
                 continue
             raw[n - 1] = (
-                self._ind_frequency(n)    * 0.25
-                + self._ind_recent_trend(n)  * 0.30
-                + self._ind_cold_period(n)   * 0.20
-                + self._ind_prize_sharing(n) * 0.25
+                self._ind_frequency(n)    * w_freq
+                + self._ind_recent_trend(n)  * w_trend
+                + self._ind_cold_period(n)   * w_cold
+                + self._ind_prize_sharing(n) * w_prize
             )
         raw = raw - raw[raw > 0].min() + 0.02 if (raw > 0).any() else raw + 0.02
         for n in exclude:
