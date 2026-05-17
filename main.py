@@ -52,12 +52,16 @@ class LottoSystem:
         """백테스트 기반 점수 가중치를 최적화하고 stat_analyzer에 즉시 적용합니다."""
         if not self.historical_data or not self.stat_analyzer:
             return
-        optimizer = WeightOptimizer(self.historical_data)
-        best_weights = optimizer.optimize()
-        self.optimized_weights = best_weights
-        self.stat_analyzer.score_weights = best_weights
-        if not silent:
-            print(" 가중치 최적화 완료 — 추천 메뉴(1·2·4·6)에 즉시 반영됩니다.")
+        try:
+            optimizer = WeightOptimizer(self.historical_data)
+            best_weights = optimizer.optimize()
+            self.optimized_weights = best_weights
+            self.stat_analyzer.score_weights = best_weights
+            if not silent:
+                print(" 가중치 최적화 완료 — 추천 메뉴(1·2·4·6)에 즉시 반영됩니다.")
+        except Exception as e:
+            if not silent:
+                print(f" 가중치 최적화 실패 (기본 가중치 사용): {e}")
 
     def _refresh_data(self):
         self.historical_data = self._load_data()

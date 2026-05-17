@@ -92,9 +92,9 @@ class WeightOptimizer:
         base_analyzer.analyze_recent_trends()
 
         candidates = base_analyzer.generate_recommendations(
-            num_recommendations=80, verbose=False
+            num_recommendations=30, verbose=False
         ) + base_analyzer.generate_unique_recommendations(
-            num_recommendations=80
+            num_recommendations=30
         )
         candidate_numbers = [c['numbers'] for c in candidates]
 
@@ -147,8 +147,9 @@ class WeightOptimizer:
             objective,
             bounds,
             seed=42,
-            maxiter=50,
-            tol=1e-4,
+            maxiter=15,
+            popsize=5,
+            tol=1e-3,
             polish=False,
             init='sobol',
         )
