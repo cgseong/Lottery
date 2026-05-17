@@ -178,6 +178,7 @@ class AIPatternLearner:
             n_comp = min(self.pca_components, X_train.shape[1], X_train.shape[0])
             self._pca = PCA(n_components=n_comp, random_state=42)
             X_train = self._pca.fit_transform(X_train)
+            X_test = self._pca.transform(X_test)
             _log.info("PCA 적용: %d차원 → %d차원", X.shape[1], n_comp)
 
         _log.info("HistGradientBoostingClassifier (LightGBM 호환) 에 MultiOutput 학습 중...")
@@ -189,7 +190,15 @@ class AIPatternLearner:
             _log.warning("내장 Boosting 모델 학습 실패, RandomForest로 대체합니다: %s", e)
             self.model = RandomForestClassifier(n_estimators=100, random_state=42)
             self.model.fit(X_train, y_train)
-        
+
+        # 테스트셋으로 모델 검증
+        try:
+            y_pred = self.model.predict(X_test)
+            avg_accuracy = float(np.mean(y_pred == y_test))
+            _log.info("검증 정확도 (번호별 평균): %.4f", avg_accuracy)
+        except Exception as e:
+            _log.warning("모델 검증 중 오류 (학습은 완료됨): %s", e)
+
         self.is_trained = True
         _log.info("모델 학습 완료")
         return True
