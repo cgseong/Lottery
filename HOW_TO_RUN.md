@@ -14,12 +14,6 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### 3. 대시보드 실행 (선택)
-
-```bash
-streamlit run dashboard_app.py
-```
-
 ---
 
 ## 메뉴 안내

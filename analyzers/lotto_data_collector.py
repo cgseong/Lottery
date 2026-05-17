@@ -4,6 +4,7 @@ import csv
 import time
 import os
 import requests
+from requests.exceptions import ConnectionError, Timeout, HTTPError
 from bs4 import BeautifulSoup
 import re
 
@@ -18,6 +19,28 @@ try:
     from utils.constants import DEFAULT_HEADERS as _DEFAULT_HEADERS
 except ImportError:
     _DEFAULT_HEADERS = None
+
+# 네트워크 설정 상수
+_DEFAULT_TIMEOUT = 10          # 기본 요청 타임아웃 (초)
+_API_TIMEOUT = 5               # API 요청 타임아웃 (초)
+_MAX_CONSECUTIVE_FAILURES = 5  # 연속 실패 허용 횟수 (초과 시 수집 중단)
+_RETRY_DELAY_BASE = 0.5        # 재시도 기본 대기 시간 (초)
+_REQUEST_DELAY = 0.3           # 요청 간 대기 시간 (초)
+
+
+class DataCollectionError(Exception):
+    """데이터 수집 관련 커스텀 예외"""
+    pass
+
+
+class NetworkError(DataCollectionError):
+    """네트워크 연결 실패"""
+    pass
+
+
+class ParseError(DataCollectionError):
+    """페이지 파싱 실패 (사이트 구조 변경 가능성)"""
+    pass
 
 
 class LottoDataCollector:
@@ -38,34 +61,85 @@ class LottoDataCollector:
             'Upgrade-Insecure-Requests': '1',
         }
 
+    # ------------------------------------------------------------------
+    # 네트워크 요청 헬퍼
+    # ------------------------------------------------------------------
+
+    def _request_get(self, url: str, timeout: int = _DEFAULT_TIMEOUT) -> requests.Response:
+        """공통 GET 요청 — 네트워크 오류를 NetworkError로 통합 변환합니다."""
+        try:
+            response = requests.get(url, headers=self.headers, timeout=timeout)
+            response.raise_for_status()
+            return response
+        except Timeout as e:
+            raise NetworkError(
+                f"요청 시간 초과 ({timeout}초). 인터넷 연결 상태를 확인해주세요."
+            ) from e
+        except ConnectionError as e:
+            raise NetworkError(
+                "서버에 연결할 수 없습니다. 인터넷 연결 또는 동행복권 사이트 상태를 확인해주세요."
+            ) from e
+        except HTTPError as e:
+            status = e.response.status_code if e.response is not None else "unknown"
+            if status == 403:
+                raise NetworkError(
+                    "접근이 차단되었습니다 (403). 잠시 후 다시 시도해주세요."
+                ) from e
+            elif status == 404:
+                raise NetworkError(
+                    f"페이지를 찾을 수 없습니다 (404). URL: {url}"
+                ) from e
+            elif status >= 500:
+                raise NetworkError(
+                    f"동행복권 서버 오류 ({status}). 잠시 후 다시 시도해주세요."
+                ) from e
+            else:
+                raise NetworkError(
+                    f"HTTP 오류 발생 ({status}). URL: {url}"
+                ) from e
+
     def _fetch_round_json(self, round_num, retries: int = 2):
         """JSON API에서 특정 회차 번호를 조회합니다. 실패 시 retries만큼 재시도합니다."""
         url = self.api_url_template.format(int(round_num))
+        last_error = None
         for attempt in range(retries + 1):
             try:
-                response = requests.get(url, headers=self.headers, timeout=3)
-                response.raise_for_status()
+                response = self._request_get(url, timeout=_API_TIMEOUT)
                 payload = response.json()
                 if payload.get("returnValue") == "success":
                     return payload
                 return None
-            except Exception:
+            except NetworkError as e:
+                last_error = e
                 if attempt < retries:
-                    time.sleep(0.5 * (attempt + 1))
+                    time.sleep(_RETRY_DELAY_BASE * (attempt + 1))
+            except (ValueError, KeyError) as e:
+                # JSON 파싱 실패
+                _log.debug("JSON 파싱 실패 (회차 %d): %s", round_num, e)
+                return None
+
+        if last_error:
+            _log.debug("API 조회 최종 실패 (회차 %d): %s", round_num, last_error)
         return None
 
+    # ------------------------------------------------------------------
+    # 최신 회차 조회
+    # ------------------------------------------------------------------
+
     def get_latest_round(self):
-        """최신 회차 정보를 가져옵니다."""
+        """최신 회차 정보를 가져옵니다.
+
+        Returns:
+            int: 최신 회차 번호, 실패 시 None
+        """
         # API 우선: HTML 타임아웃 환경에서도 빠르게 동작
         latest_round = self._find_latest_round_via_api()
         if latest_round:
             return latest_round
 
         latest_round = None
-        response = None
         try:
-            response = requests.get(self.search_url, headers=self.headers, timeout=3)
-            response.raise_for_status()
+            response = self._request_get(self.search_url)
             soup = BeautifulSoup(response.content, 'html.parser')
 
             # 방법 1: win_result 영역에서 찾기
@@ -101,12 +175,17 @@ class LottoDataCollector:
                         latest_round = int(match.group(1))
 
             # 방법 4: 페이지 내 drwNo 파라미터에서 추출
-            if not latest_round and response is not None:
+            if not latest_round:
                 matches = re.findall(r'drwNo=(\d+)', response.text or "")
                 if matches:
                     latest_round = max(int(x) for x in matches)
-        except Exception as e:
-            _log.warning("최신 회차 HTML 조회 실패, API fallback 사용: %s", e)
+
+        except NetworkError as e:
+            _log.warning("최신 회차 HTML 조회 실패: %s", e)
+            print(f"\n[WARN] {e}")
+        except (ValueError, AttributeError) as e:
+            _log.warning("최신 회차 HTML 파싱 실패 (사이트 구조 변경 가능): %s", e)
+            print("\n[WARN] 동행복권 사이트 구조가 변경되었을 수 있습니다. API로 시도합니다.")
 
         # 방법 5: JSON API fallback (HTML 실패/파싱 실패 포함)
         if not latest_round:
@@ -131,14 +210,32 @@ class LottoDataCollector:
             return None
         return lo if self._fetch_round_json(lo) else None
 
+    # ------------------------------------------------------------------
+    # 데이터 수집
+    # ------------------------------------------------------------------
+
     def collect_winning_numbers(self, start_round=None, end_round=None, max_rounds=100):
-        """지정된 범위의 당첨번호를 수집합니다."""
+        """지정된 범위의 당첨번호를 수집합니다.
+
+        연속 실패가 _MAX_CONSECUTIVE_FAILURES를 초과하면 수집을 조기 중단합니다.
+
+        Returns:
+            list[dict]: 수집된 당첨번호 목록
+        """
         print(" 동행복권 사이트에서 당첨번호 수집 중...")
 
         # 최신 회차 확인
-        latest_round = self.get_latest_round()
+        try:
+            latest_round = self.get_latest_round()
+        except Exception as e:
+            print(f"\n[ERROR] 최신 회차 조회 실패: {e}")
+            print("  → 인터넷 연결 상태를 확인해주세요.")
+            return []
+
         if not latest_round:
-            print(" 최신 회차 정보를 가져올 수 없습니다.")
+            print("\n[ERROR] 최신 회차 정보를 가져올 수 없습니다.")
+            print("  → 동행복권 사이트(dhlottery.co.kr) 접속 가능 여부를 확인해주세요.")
+            print("  → VPN 또는 방화벽이 차단하고 있을 수 있습니다.")
             return []
 
         _log.info("최신 회차: %d회", latest_round)
@@ -154,8 +251,17 @@ class LottoDataCollector:
 
         collected_data = []
         failed_rounds = []
+        consecutive_failures = 0
 
         for round_num in range(start_round, end_round + 1):
+            # 연속 실패 체크 — 네트워크 장애 시 조기 중단
+            if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                print(f"\n[WARN] 연속 {_MAX_CONSECUTIVE_FAILURES}회 실패로 수집을 중단합니다.")
+                print("  → 네트워크 상태를 확인하고 나중에 다시 시도해주세요.")
+                remaining = list(range(round_num, end_round + 1))
+                failed_rounds.extend(remaining)
+                break
+
             try:
                 print(f"    {round_num}회 수집 중...", end=" ")
 
@@ -164,36 +270,66 @@ class LottoDataCollector:
                 numbers = self._extract_numbers_from_json(payload, round_num)
 
                 if not numbers:
-                    round_url = self.round_url_template.format(round_num)
-                    response = requests.get(round_url, headers=self.headers, timeout=10)
-                    response.raise_for_status()
-                    soup = BeautifulSoup(response.content, 'html.parser')
-                    numbers = self._extract_numbers(soup, round_num)
+                    try:
+                        round_url = self.round_url_template.format(round_num)
+                        response = self._request_get(round_url)
+                        soup = BeautifulSoup(response.content, 'html.parser')
+                        numbers = self._extract_numbers(soup, round_num)
+                    except NetworkError as e:
+                        _log.warning("%d회 HTML 폴백 실패: %s", round_num, e)
+                        numbers = None
 
                 if numbers:
                     collected_data.append(numbers)
+                    consecutive_failures = 0  # 성공 시 연속 실패 카운터 초기화
                     print("")
                 else:
                     failed_rounds.append(round_num)
-                    print("")
+                    consecutive_failures += 1
+                    print("(파싱 실패)")
 
-                time.sleep(0.3)
+                time.sleep(_REQUEST_DELAY)
+
+            except NetworkError as e:
+                failed_rounds.append(round_num)
+                consecutive_failures += 1
+                _log.warning("%d회 네트워크 오류: %s", round_num, e)
+                print(f"(네트워크 오류)")
+                time.sleep(_RETRY_DELAY_BASE * 2)
 
             except Exception as e:
                 failed_rounds.append(round_num)
-                _log.warning("%d회 수집 오류: %s", round_num, e)
-                print(f"(오류)")
-                time.sleep(1)
+                consecutive_failures += 1
+                _log.error("%d회 예상치 못한 오류: %s", round_num, e)
+                print(f"(오류: {type(e).__name__})")
+                time.sleep(_RETRY_DELAY_BASE * 2)
 
+        # 결과 요약
         print(f"\n 수집 완료: {len(collected_data)}개 성공, {len(failed_rounds)}개 실패")
 
         if failed_rounds:
-            print(f" 실패한 회차: {failed_rounds}")
+            if len(failed_rounds) <= 10:
+                print(f" 실패한 회차: {failed_rounds}")
+            else:
+                print(f" 실패한 회차: {failed_rounds[:10]} ... 외 {len(failed_rounds)-10}개")
+
+            # 실패 원인 안내
+            if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                print("\n[TIP] 네트워크 문제로 중단되었습니다. 나중에 메뉴 7번을 다시 실행하면")
+                print("      누락된 회차만 자동으로 보충됩니다.")
 
         return collected_data
 
+    # ------------------------------------------------------------------
+    # HTML 파싱
+    # ------------------------------------------------------------------
+
     def _extract_numbers(self, soup, round_num):
-        """HTML에서 당첨번호를 추출합니다."""
+        """HTML에서 당첨번호를 추출합니다.
+
+        Returns:
+            dict: 당첨번호 딕셔너리, 파싱 실패 시 None
+        """
         try:
             numbers = []
             bonus_number = None
@@ -211,16 +347,7 @@ class LottoDataCollector:
                     if h4_element:
                         round_text = h4_element.get_text().strip()
                         if str(round_num) in round_text:
-                            return {
-                                '회차': round_num,
-                                '번호1': numbers[0],
-                                '번호2': numbers[1],
-                                '번호3': numbers[2],
-                                '번호4': numbers[3],
-                                '번호5': numbers[4],
-                                '번호6': numbers[5],
-                                '보너스번호': bonus_number
-                            }
+                            return self._build_record(round_num, numbers, bonus_number)
 
             # 방법 2: 테이블에서 찾기
             if not numbers:
@@ -259,21 +386,18 @@ class LottoDataCollector:
 
             # 결과 반환
             if len(numbers) == 6 and bonus_number is not None:
-                return {
-                    '회차': round_num,
-                    '번호1': numbers[0],
-                    '번호2': numbers[1],
-                    '번호3': numbers[2],
-                    '번호4': numbers[3],
-                    '번호5': numbers[4],
-                    '번호6': numbers[5],
-                    '보너스번호': bonus_number
-                }
+                # 번호 유효성 검증
+                if all(1 <= n <= 45 for n in numbers) and 1 <= bonus_number <= 45:
+                    return self._build_record(round_num, numbers, bonus_number)
+                else:
+                    _log.warning("%d회: 유효하지 않은 번호 감지 %s + %d", round_num, numbers, bonus_number)
+                    return None
 
+            _log.debug("%d회: HTML에서 번호 추출 실패 (사이트 구조 변경 가능)", round_num)
             return None
 
-        except Exception as e:
-            _log.debug("번호 추출 오류: %s", e)
+        except (ValueError, AttributeError, TypeError) as e:
+            _log.debug("%d회 번호 추출 오류: %s", round_num, e)
             return None
 
     def _extract_numbers_from_json(self, payload, round_num):
@@ -281,25 +405,60 @@ class LottoDataCollector:
         try:
             if not payload or payload.get("returnValue") != "success":
                 return None
+
+            numbers = [
+                int(payload.get(f'drwtNo{i}'))
+                for i in range(1, 7)
+            ]
+            bonus = int(payload.get('bnusNo'))
+
+            # 번호 유효성 검증
+            if not all(1 <= n <= 45 for n in numbers) or not (1 <= bonus <= 45):
+                _log.warning("%d회 API: 유효하지 않은 번호 %s + %d", round_num, numbers, bonus)
+                return None
+
             record = {
                 '회차': int(payload.get('drwNo', round_num)),
                 '날짜': payload.get('drwNoDate', ''),
-                '번호1': int(payload.get('drwtNo1')),
-                '번호2': int(payload.get('drwtNo2')),
-                '번호3': int(payload.get('drwtNo3')),
-                '번호4': int(payload.get('drwtNo4')),
-                '번호5': int(payload.get('drwtNo5')),
-                '번호6': int(payload.get('drwtNo6')),
-                '보너스번호': int(payload.get('bnusNo')),
+                '번호1': numbers[0],
+                '번호2': numbers[1],
+                '번호3': numbers[2],
+                '번호4': numbers[3],
+                '번호5': numbers[4],
+                '번호6': numbers[5],
+                '보너스번호': bonus,
                 '1등당첨자수': int(payload.get('firstPrzwnerCo', 0)),
                 '1등당첨금액': int(payload.get('firstWinamnt', 0)),
             }
             return record
-        except Exception:
+        except (TypeError, ValueError, KeyError) as e:
+            _log.debug("%d회 JSON 파싱 오류: %s", round_num, e)
             return None
 
+    @staticmethod
+    def _build_record(round_num, numbers, bonus_number):
+        """번호 리스트로부터 표준 레코드 딕셔너리를 생성합니다."""
+        return {
+            '회차': round_num,
+            '번호1': numbers[0],
+            '번호2': numbers[1],
+            '번호3': numbers[2],
+            '번호4': numbers[3],
+            '번호5': numbers[4],
+            '번호6': numbers[5],
+            '보너스번호': bonus_number,
+        }
+
+    # ------------------------------------------------------------------
+    # CSV 저장
+    # ------------------------------------------------------------------
+
     def save_to_csv(self, data, filename='로또당첨번호.csv'):
-        """수집된 데이터를 CSV 파일로 저장합니다."""
+        """수집된 데이터를 CSV 파일로 저장합니다.
+
+        Returns:
+            bool: 저장 성공 여부
+        """
         if not data:
             print(" 저장할 데이터가 없습니다.")
             return False
@@ -319,13 +478,16 @@ class LottoDataCollector:
                                 if any('회차' in str(k) for k in keys):
                                     existing_data = temp_data
                                     break
-                    except Exception:
+                    except (UnicodeDecodeError, csv.Error):
                         continue
+                    except OSError as e:
+                        _log.warning("기존 CSV 읽기 실패: %s", e)
+                        break
 
             # 중복 제거 및 병합
             existing_rounds = set()
             valid_existing_data = []
-            
+
             for row in existing_data:
                 try:
                     if '회차' in row:
@@ -333,7 +495,7 @@ class LottoDataCollector:
                         valid_existing_data.append(row)
                 except (ValueError, KeyError):
                     continue
-            
+
             new_data = [row for row in data if int(row['회차']) not in existing_rounds]
 
             if not new_data:
@@ -362,13 +524,28 @@ class LottoDataCollector:
             _log.info("총 %d개 회차 데이터가 있습니다.", len(all_data))
             return True
 
+        except OSError as e:
+            print(f"\n[ERROR] 파일 저장 실패: {e}")
+            if "No space" in str(e) or "ENOSPC" in str(e):
+                print("  → 디스크 공간이 부족합니다. 공간을 확보 후 다시 시도해주세요.")
+            else:
+                print(f"  → 파일 쓰기 권한 또는 경로를 확인해주세요: {filename}")
+            return False
         except Exception as e:
-            _log.error("CSV 파일 저장 실패: %s", e)
-            print(f" CSV 파일 저장 실패: {e}")
+            _log.error("CSV 파일 저장 중 예상치 못한 오류: %s", e)
+            print(f"\n[ERROR] CSV 파일 저장 실패: {e}")
             return False
 
+    # ------------------------------------------------------------------
+    # 업데이트
+    # ------------------------------------------------------------------
+
     def update_latest_data(self, max_rounds=10):
-        """최신 회차 데이터만 업데이트합니다."""
+        """최신 회차 데이터만 업데이트합니다.
+
+        Returns:
+            list[dict]: 새로 수집된 데이터 목록
+        """
         print(" 최신 당첨번호 업데이트 중...")
 
         # 기존 데이터 확인
@@ -385,12 +562,15 @@ class LottoDataCollector:
                                     existing_rounds.add(int(row['회차']))
                                 except ValueError:
                                     continue
-                        
+
                         if existing_rounds:
                             break
-                except Exception:
+                except (UnicodeDecodeError, csv.Error):
                     continue
-        
+                except OSError as e:
+                    _log.warning("기존 CSV 읽기 실패: %s", e)
+                    break
+
         if not existing_rounds:
             print(" 기존 데이터가 없거나 읽을 수 없습니다. 전체 데이터를 수집합니다.")
             data = self.collect_winning_numbers(start_round=1)
@@ -402,14 +582,16 @@ class LottoDataCollector:
         latest_available = self.get_latest_round()
 
         if not latest_available:
-            print(" 최신 회차 정보를 가져올 수 없습니다.")
+            print("\n[WARN] 최신 회차 정보를 가져올 수 없습니다.")
+            print("  → 인터넷 연결 상태를 확인해주세요.")
             return []
 
         if latest_existing >= latest_available:
-            print(" 이미 최신 데이터가 있습니다.")
+            print(f" 이미 최신 데이터가 있습니다. (현재: {latest_existing}회)")
             return []
 
-        print(f" {latest_existing + 1}회 ~ {latest_available}회 업데이트")
+        gap = latest_available - latest_existing
+        print(f" {latest_existing + 1}회 ~ {latest_available}회 업데이트 ({gap}회차)")
 
         new_data = self.collect_winning_numbers(
             start_round=latest_existing + 1,

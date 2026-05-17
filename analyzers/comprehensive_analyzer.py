@@ -5,6 +5,8 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
+from utils.helpers import passes_advanced_filters
+
 # 로또 기본 상수
 _NUM_BALLS = 45
 _PICK = 6
@@ -186,17 +188,33 @@ class ComprehensiveAnalyzer:
         return float(_CONSEC_SCORES.get(pairs, 0.05))
 
     def _ind_cooccurrence(self, numbers: List[int]) -> float:
-        """지표 8: 번호 쌍 공동 출현 — 무작위 기댓값 대비 실제 비율"""
+        """지표 8: 조건부 확률 기반 번호 쌍 공동 출현.
+
+        P(B|A) = count(A∩B) / count(A) 를 활용하여
+        단순 공동출현 횟수 대신 조건부 확률로 평가합니다.
+        """
         n = len(self._data_matrix)
         if n == 0:
             return 0.5
-        expected = n * (6.0 / 45.0) * (5.0 / 44.0)
+
         total = 0.0
         cnt = 0
         for a, b in combinations(numbers, 2):
-            total += float(self._cooccur[a][b]) / max(1.0, expected)
+            freq_a = float(self._freq[a])
+            freq_b = float(self._freq[b])
+            co_ab = float(self._cooccur[a][b])
+            if freq_a > 0 and freq_b > 0:
+                # P(B|A) + P(A|B) 의 평균 → 쌍의 조건부 연관도
+                cond_prob = (co_ab / freq_a + co_ab / freq_b) / 2.0
+                total += cond_prob
             cnt += 1
-        return float(min(1.0, total / max(1, cnt) / 3.0))
+
+        if cnt == 0:
+            return 0.5
+        # 기대값: 각 번호가 독립이면 P(B|A) ≈ 6/45 ≈ 0.133
+        expected = 6.0 / 45.0
+        avg_cond = total / cnt
+        return float(min(1.0, avg_cond / (expected * 2.5)))
 
     def _ind_last_digit_diversity(self, numbers: List[int]) -> float:
         """지표 9: 일의 자리 숫자 다양성 (6개 모두 다르면 만점)"""
@@ -229,16 +247,31 @@ class ComprehensiveAnalyzer:
     # ------------------------------------------------------------------
 
     def _number_sampling_weights(self, exclude: set) -> np.ndarray:
-        """번호 1~45의 샘플링 확률 벡터 (인덱스 i → 번호 i+1)"""
+        """번호 1~45의 샘플링 확률 벡터 (인덱스 i → 번호 i+1)
+
+        self.weights에서 개별 번호에 적용 가능한 4개 지표
+        (frequency, recent_trend, cold_period, prize_sharing)의 가중치를
+        추출·정규화하여 사용합니다. 따라서 self.weights를 변경하면
+        샘플링 확률도 자동으로 연동됩니다.
+        """
+        # self.weights에서 개별 번호 수준 지표 가중치를 추출하여 정규화
+        _INDIVIDUAL_KEYS = ('frequency', 'recent_trend', 'cold_period', 'prize_sharing')
+        raw_w = {k: self.weights.get(k, 0.0) for k in _INDIVIDUAL_KEYS}
+        w_total = sum(raw_w.values()) or 1.0
+        w_freq  = raw_w['frequency']    / w_total
+        w_trend = raw_w['recent_trend'] / w_total
+        w_cold  = raw_w['cold_period']  / w_total
+        w_prize = raw_w['prize_sharing'] / w_total
+
         raw = np.zeros(45, dtype=float)
         for n in range(1, _NUM_BALLS + 1):
             if n in exclude:
                 continue
             raw[n - 1] = (
-                self._ind_frequency(n)    * 0.25
-                + self._ind_recent_trend(n)  * 0.30
-                + self._ind_cold_period(n)   * 0.20
-                + self._ind_prize_sharing(n) * 0.25
+                self._ind_frequency(n)    * w_freq
+                + self._ind_recent_trend(n)  * w_trend
+                + self._ind_cold_period(n)   * w_cold
+                + self._ind_prize_sharing(n) * w_prize
             )
         raw = raw - raw[raw > 0].min() + 0.02 if (raw > 0).any() else raw + 0.02
         for n in exclude:
@@ -256,8 +289,13 @@ class ComprehensiveAnalyzer:
         sample_size: int = 30_000,
         exclude_numbers: Optional[set] = None,
         diversity_threshold: float = 0.40,
+        seed: Optional[int] = None,
     ) -> List[Dict]:
-        """10개 지표 종합 점수 기준 추천 조합 목록 반환"""
+        """10개 지표 종합 점수 기준 추천 조합 목록 반환
+
+        Args:
+            seed: 난수 시드. None이면 매번 다른 결과, 정수를 주면 재현 가능.
+        """
         if not len(self._data_matrix):
             return []
 
@@ -266,7 +304,7 @@ class ComprehensiveAnalyzer:
             return []
 
         p = self._number_sampling_weights(exclude)
-        rng = np.random.default_rng(seed=42)
+        rng = np.random.default_rng(seed=seed)
 
         seen: set = set()
         scored: List[tuple] = []
@@ -277,6 +315,9 @@ class ComprehensiveAnalyzer:
             if key in seen:
                 continue
             seen.add(key)
+            # 고급 필터: AC값, 동일 십의자리, 끝수합, 저고비율
+            if not passes_advanced_filters(nums):
+                continue
             scored.append((self.compute_score(nums), nums))
 
         scored.sort(key=lambda x: x[0], reverse=True)

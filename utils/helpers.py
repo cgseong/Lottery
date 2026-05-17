@@ -283,3 +283,124 @@ def normalize_exclude_numbers(exclude_numbers) -> Set[int]:
     if isinstance(exclude_numbers, dict):
         return set(exclude_numbers.keys())
     return set(exclude_numbers)
+
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 조합 필터링 함수 — 역사적으로 당첨 가능성이 낮은 패턴을 제거합니다.
+# ──────────────────────────────────────────────────────────────────────
+
+def calc_ac_value(numbers: List[int]) -> int:
+    """AC값 (Arithmetic Complexity) 계산.
+
+    6개 번호에서 만들 수 있는 모든 쌍의 차이 고유값 수.
+    이론적 최대: C(6,2) = 15, 최소: 5 (등차수열)
+    역대 당첨번호 AC값은 대부분 7~10 범위.
+
+    Examples:
+        >>> calc_ac_value([1, 2, 3, 4, 5, 6])  # 등차
+        5
+        >>> calc_ac_value([2, 13, 19, 27, 38, 45])
+        15
+    """
+    sorted_nums = sorted(numbers)
+    diffs = set()
+    for i in range(len(sorted_nums)):
+        for j in range(i + 1, len(sorted_nums)):
+            diffs.add(sorted_nums[j] - sorted_nums[i])
+    return len(diffs)
+
+
+def check_same_decade_limit(numbers: List[int], max_same: int = 3) -> bool:
+    """동일 십의자리(decade) 번호가 max_same개 이하인지 확인합니다.
+
+    로또 번호를 십의자리 기준으로 그룹핑(1~9, 10~19, 20~29, 30~39, 40~45)하여
+    한 그룹에 max_same개 초과 번호가 있으면 False.
+
+    Examples:
+        >>> check_same_decade_limit([11, 12, 13, 14, 25, 36])  # 10대 4개
+        False
+        >>> check_same_decade_limit([3, 12, 23, 34, 41, 45])
+        True
+    """
+    from collections import Counter
+    decades = Counter((n - 1) // 10 for n in numbers)
+    return all(cnt <= max_same for cnt in decades.values())
+
+
+def calc_last_digit_sum(numbers: List[int]) -> int:
+    """끝수(일의 자리) 합계를 계산합니다.
+
+    역대 당첨번호의 끝수합은 대체로 13~33 범위에 약 80% 분포.
+
+    Examples:
+        >>> calc_last_digit_sum([3, 12, 25, 31, 40, 44])
+        15
+    """
+    return sum(n % 10 for n in numbers)
+
+
+def check_last_digit_sum_range(numbers: List[int], low: int = 13, high: int = 33) -> bool:
+    """끝수합이 지정 범위 내인지 확인합니다.
+
+    Args:
+        low: 하한 (포함)
+        high: 상한 (포함)
+    """
+    s = calc_last_digit_sum(numbers)
+    return low <= s <= high
+
+
+def check_low_high_ratio(numbers: List[int], max_imbalance: int = 4) -> bool:
+    """저번호(1-22) / 고번호(23-45) 비율이 max_imbalance 이하인지 확인합니다.
+
+    max_imbalance=4 → 허용 비율: 2:4, 3:3, 4:2 (즉, 한쪽이 5개 이상이면 False)
+
+    Examples:
+        >>> check_low_high_ratio([1, 2, 3, 4, 5, 44])  # 저5:고1
+        False
+        >>> check_low_high_ratio([3, 12, 22, 30, 38, 44])  # 저3:고3
+        True
+    """
+    low_count = sum(1 for n in numbers if n <= 22)
+    high_count = 6 - low_count
+    return low_count <= max_imbalance and high_count <= max_imbalance
+
+
+def passes_advanced_filters(
+    numbers: List[int],
+    min_ac: int = 7,
+    max_same_decade: int = 3,
+    last_digit_sum_range: Tuple[int, int] = (13, 33),
+    max_low_high_imbalance: int = 4,
+) -> bool:
+    """복합 고급 필터를 한 번에 적용합니다.
+
+    Args:
+        numbers: 6개 번호 조합
+        min_ac: 최소 AC값 (기본 7, 역사적으로 AC<7인 당첨은 극히 드묾)
+        max_same_decade: 동일 십의자리 최대 허용 수
+        last_digit_sum_range: (최소, 최대) 끝수합 범위
+        max_low_high_imbalance: 저/고 한쪽 최대 허용 수
+
+    Returns:
+        True: 모든 필터 통과 (양호한 조합)
+        False: 하나라도 실패 (제거 대상)
+    """
+    # 1. AC값 필터
+    if calc_ac_value(numbers) < min_ac:
+        return False
+
+    # 2. 동일 십의자리 제한
+    if not check_same_decade_limit(numbers, max_same_decade):
+        return False
+
+    # 3. 끝수합 범위
+    if not check_last_digit_sum_range(numbers, *last_digit_sum_range):
+        return False
+
+    # 4. 저고비율
+    if not check_low_high_ratio(numbers, max_low_high_imbalance):
+        return False
+
+    return True
