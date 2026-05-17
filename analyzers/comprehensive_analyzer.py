@@ -5,6 +5,8 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
+from utils.helpers import passes_advanced_filters
+
 # 로또 기본 상수
 _NUM_BALLS = 45
 _PICK = 6
@@ -297,6 +299,9 @@ class ComprehensiveAnalyzer:
             if key in seen:
                 continue
             seen.add(key)
+            # 고급 필터: AC값, 동일 십의자리, 끝수합, 저고비율
+            if not passes_advanced_filters(nums):
+                continue
             scored.append((self.compute_score(nums), nums))
 
         scored.sort(key=lambda x: x[0], reverse=True)

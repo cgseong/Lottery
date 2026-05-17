@@ -6,7 +6,7 @@ import random
 from collections import Counter
 from typing import List, Dict, Optional, Set, Tuple
 
-from utils.helpers import check_consecutive_count
+from utils.helpers import check_consecutive_count, passes_advanced_filters
 from utils.logging_config import get_logger
 
 _log = get_logger(__name__)
@@ -355,6 +355,10 @@ class StatisticalAnalyzer:
         # Consecutive filter
         consecutive_count = self.check_consecutive_numbers(numbers)
         if profile['allowed_consecutive'] and consecutive_count not in profile['allowed_consecutive']:
+            return False
+
+        # Advanced filters: AC값, 동일 십의자리, 끝수합, 저고비율
+        if not passes_advanced_filters(numbers):
             return False
 
         return True
