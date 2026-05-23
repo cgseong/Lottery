@@ -16,6 +16,8 @@ from utils.logging_config import get_logger
 from .statistical_analyzer import StatisticalAnalyzer
 from .pattern_matching_analyzer import PatternMatchingAnalyzer
 from .trend_analyzer import TrendAnalyzer
+from .markov_chain_analyzer import MarkovChainAnalyzer
+from .advanced_filter import AdvancedFilter
 
 _log = get_logger(__name__)
 
@@ -26,6 +28,9 @@ class EnsembleAnalyzer:
         self.statistical_analyzer = StatisticalAnalyzer(historical_data)
         self.pattern_analyzer = PatternMatchingAnalyzer(historical_data)
         self.trend_analyzer = TrendAnalyzer(historical_data)
+        self.markov_analyzer = MarkovChainAnalyzer(historical_data)
+        self.advanced_filter = AdvancedFilter(historical_data)
+        self.historical_data = historical_data
 
     def check_consecutive_numbers(self, numbers):
         """연속 번호 쌍의 총 개수를 반환합니다. (utils.helpers 위임)"""
