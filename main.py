@@ -87,6 +87,10 @@ class LottoSystem:
         print(" 8. 종합 패턴 분석 추천 (10개 지표)")
         print(" 9. 전체 패턴 분석 기반 번호 추천")
         print("10. 역(逆) 군중심리 추천 (당첨금 극대화)")
+        print("─" * 60)
+        print("11. 🧬 통합 AI 추천 (마르코프+군집+DL+필터)")
+        print("12. 📊 고급 분석 리포트 (핫/콜드/전이/군집)")
+        print("13. 🏆 전략 성능 평가 (백테스트 토너먼트)")
         print(" 0. 종료")
         print("=" * 60)
 
@@ -114,6 +118,12 @@ class LottoSystem:
                 self.show_round_info()
             elif choice == '10':
                 self.recommend_anti_crowd()
+            elif choice == '11':
+                self.integrated_ai_recommend()
+            elif choice == '12':
+                self.advanced_analysis_report()
+            elif choice == '13':
+                self.strategy_performance_eval()
             elif choice == '0':
                 print("\n 프로그램을 종료합니다.")
                 break
@@ -1870,6 +1880,191 @@ class LottoSystem:
         if save == 'y':
             self.storage.save_combination(nums, "10지표 종합 추천")
             print("    저장되었습니다.")
+
+    # ══════════════════════════════════════════════════════════════
+    # 11. 통합 AI 추천 (마르코프+군집+DL+필터)
+    # ══════════════════════════════════════════════════════════════
+
+    def integrated_ai_recommend(self):
+        """11. 통합 AI 추천 — 모든 고급 분석 모듈을 결합한 최종 추천."""
+        if not self.historical_data:
+            print("\n[WARN] 데이터가 없습니다. 메뉴 7번(데이터 수집)을 먼저 실행하세요.")
+            return
+
+        from analyzers.integrated_recommender import IntegratedRecommender
+
+        print("\n" + "=" * 60)
+        print(" 통합 AI 추천 (마르코프 + 군집 + 딥러닝 + 핫콜드 + 필터)")
+        print("=" * 60)
+        print(" 5개 분석 엔진의 확률을 앙상블 합산하고")
+        print(" 8종 고급 필터를 통과한 최적 조합을 추천합니다.")
+        print("-" * 60)
+
+        exclude_nums = set(self.exclude_manager.get_exclude_numbers())
+        if exclude_nums:
+            print(f" 제외번호 적용: {sorted(exclude_nums)}")
+
+        try:
+            count = int(input("\n 추천 조합 수 (1~10, 기본 5): ").strip() or "5")
+            count = max(1, min(10, count))
+        except ValueError:
+            count = 5
+
+        print("\n 분석 엔진 초기화 및 학습 중... (최초 실행 시 시간이 소요됩니다)")
+        recommender = IntegratedRecommender(self.historical_data, dl_epochs=30)
+        results = recommender.generate_recommendations(
+            num_recommendations=count,
+            exclude_numbers=exclude_nums,
+        )
+
+        if not results:
+            print("\n[WARN] 추천 조합을 생성할 수 없습니다.")
+            return
+
+        print(f"\n{'═' * 60}")
+        for i, rec in enumerate(results, 1):
+            nums = rec['numbers']
+            score = rec['score']
+            print(f"\n [{i}] {nums}")
+            print(f"     종합점수: {score:.4f}  "
+                  f"필터: {rec['filter_score']:.3f}  "
+                  f"군집: {rec['cluster_score']:.3f}  "
+                  f"핫콜드: {rec['hotcold_score']:.3f}")
+            save = input("     저장? (y/n): ").strip().lower()
+            if save == 'y':
+                self.storage.save_combination(nums, "통합 AI 추천")
+                print("      저장되었습니다.")
+        print(f"\n{'═' * 60}")
+
+    # ══════════════════════════════════════════════════════════════
+    # 12. 고급 분석 리포트 (핫/콜드/전이/군집)
+    # ══════════════════════════════════════════════════════════════
+
+    def advanced_analysis_report(self):
+        """12. 고급 분석 리포트 — 마르코프, 군집, 핫/콜드 상세 분석."""
+        if not self.historical_data:
+            print("\n[WARN] 데이터가 없습니다.")
+            return
+
+        from analyzers.integrated_recommender import IntegratedRecommender
+
+        print("\n" + "=" * 60)
+        print(" 고급 분석 리포트")
+        print("=" * 60)
+        print(" 분석 중...")
+
+        recommender = IntegratedRecommender(self.historical_data, dl_epochs=10)
+        report = recommender.get_analysis_report()
+
+        print(f"\n 최근 당첨번호: {report.get('latest_numbers', [])}")
+
+        if 'markov_top10' in report:
+            print(f"\n 마르코프 전이확률 기반 유력 번호 (Top 10):")
+            for num, prob in report['markov_top10']:
+                bar = '█' * int(prob * 100)
+                print(f"   {num:2d}번: {prob:.4f}  {bar}")
+
+        if 'section_forecast' in report:
+            sf = report['section_forecast']
+            print(f"\n 다음 회차 구간별 예상 분포:")
+            print(f"   1-15 구간: {sf.get('1-15', 0):.1%}")
+            print(f"   16-30 구간: {sf.get('16-30', 0):.1%}")
+            print(f"   31-45 구간: {sf.get('31-45', 0):.1%}")
+
+        if 'current_cluster' in report:
+            cp = report['current_cluster']
+            print(f"\n 현재 군집 프로파일 (Cluster #{cp.get('cluster_id', 0)}):")
+            print(f"   소속 샘플 수: {cp.get('sample_count', 0)}회")
+            print(f"   평균 합계: {cp.get('avg_sum', 0):.1f}")
+            print(f"   평균 홀수 비율: {cp.get('avg_odd_ratio', 0):.1%}")
+            print(f"   군집 내 주요 번호:")
+            for num, score in cp.get('top_numbers', [])[:7]:
+                print(f"     {num:2d}번 (출현율: {score:.3f})")
+
+        if 'hot_numbers' in report:
+            print(f"\n 핫 번호 (온도 높은 순):")
+            hot_str = ', '.join(f"{n}번({t:+.3f})" for n, t in report['hot_numbers'][:7])
+            print(f"   {hot_str}")
+        if 'cold_numbers' in report:
+            print(f"\n 콜드 번호 (온도 낮은 순):")
+            cold_str = ', '.join(f"{n}번({t:+.3f})" for n, t in report['cold_numbers'][:7])
+            print(f"   {cold_str}")
+
+        if 'optimal_sum_range' in report:
+            lo, hi = report['optimal_sum_range']
+            print(f"\n 최적 합계 범위 (80% 신뢰구간): {lo} ~ {hi}")
+
+        print(f"\n{'═' * 60}")
+
+    # ══════════════════════════════════════════════════════════════
+    # 13. 전략 성능 평가 (백테스트 토너먼트)
+    # ══════════════════════════════════════════════════════════════
+
+    def strategy_performance_eval(self):
+        """13. 전략 성능 평가 — 롤링 백테스트 기반 토너먼트."""
+        if not self.historical_data or len(self.historical_data) < 250:
+            print("\n[WARN] 백테스트에 필요한 데이터가 부족합니다 (최소 250회차).")
+            return
+
+        from features.advanced_backtester import (
+            ABTestFramework, StrategyFactory
+        )
+
+        print("\n" + "=" * 60)
+        print(" 전략 성능 평가 (롤링 백테스트 토너먼트)")
+        print("=" * 60)
+        print(" 과거 데이터를 시간순으로 슬라이딩하며")
+        print(" 각 전략의 적중률을 비교합니다.")
+        print("-" * 60)
+
+        try:
+            max_rounds = int(input(" 테스트 회차 수 (10~100, 기본 30): ").strip() or "30")
+            max_rounds = max(10, min(100, max_rounds))
+        except ValueError:
+            max_rounds = 30
+
+        strategies = {
+            '통계분석': StrategyFactory.statistical_strategy,
+            '종합분석(10지표)': StrategyFactory.comprehensive_strategy,
+            '마르코프체인': StrategyFactory.markov_strategy,
+            '군집분석': StrategyFactory.cluster_strategy,
+            '하이브리드': StrategyFactory.hybrid_strategy,
+        }
+
+        print(f"\n {len(strategies)}개 전략 x {max_rounds}회차 평가 중...")
+        print(" (소요시간: 1~5분)")
+
+        framework = ABTestFramework(
+            self.historical_data,
+            train_window=200,
+            predictions_per_round=5,
+        )
+        result = framework.tournament(strategies, max_rounds=max_rounds)
+
+        print(f"\n{'═' * 60}")
+        print(" 토너먼트 결과 (3+ 적중률 기준)")
+        print(f"{'─' * 60}")
+        print(f" {'순위':<4} {'전략':<20} {'3+적중률':<12} {'평균매치'}")
+        print(f"{'─' * 60}")
+
+        for i, (name, rate) in enumerate(result['rankings'], 1):
+            detail = result['results'][name]
+            medal = ['1st', '2nd', '3rd'][i-1] if i <= 3 else '   '
+            print(f" {medal} {i}. {name:<18} {rate:.4f}       "
+                  f"{detail['avg_hits']:.3f}")
+
+        print(f"{'─' * 60}")
+        print(f" 최적 전략: {result['best']}")
+        print(f"{'═' * 60}")
+
+        if input("\n 상세 적중 분포를 확인하시겠습니까? (y/n): ").strip().lower() == 'y':
+            for name, detail in result['results'].items():
+                dist = detail['hit_distribution']
+                print(f"\n [{name}]")
+                for hits in range(7):
+                    cnt = dist.get(hits, 0)
+                    bar = '█' * min(cnt, 50)
+                    print(f"   {hits}개 일치: {cnt:4d}  {bar}")
 
 
 if __name__ == "__main__":
