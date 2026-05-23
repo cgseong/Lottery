@@ -91,6 +91,7 @@ class LottoSystem:
         print("11. 🧬 통합 AI 추천 (마르코프+군집+DL+필터)")
         print("12. 📊 고급 분석 리포트 (핫/콜드/전이/군집)")
         print("13. 🏆 전략 성능 평가 (백테스트 토너먼트)")
+        print("14. 📋 모든 회차정보 보기")
         print(" 0. 종료")
         print("=" * 60)
 
@@ -124,6 +125,8 @@ class LottoSystem:
                 self.advanced_analysis_report()
             elif choice == '13':
                 self.strategy_performance_eval()
+            elif choice == '14':
+                self.show_all_rounds()
             elif choice == '0':
                 print("\n 프로그램을 종료합니다.")
                 break
@@ -1825,6 +1828,77 @@ class LottoSystem:
         print(f"\n  {yellow}💡 참고{reset}: 본 전략은 1등 확률을 높이지 않습니다.")
         print(f"     단지 {bold}당첨 시 분배 인원을 줄여 기댓값을 높이는{reset} "
               f"통계적 시도입니다.")
+
+    # ──────────────────────────────────────────────
+    # 14. 모든 회차정보 보기
+    # ──────────────────────────────────────────────
+
+    def show_all_rounds(self):
+        """14. 모든 회차정보 보기 - 전체 당첨번호를 최신순으로 표시"""
+        rows = self._load_round_data()
+        if not rows:
+            print("\n[WARN] 데이터가 없습니다. 메뉴 7번(데이터 수집)을 먼저 실행해주세요.")
+            return
+
+        total = len(rows)
+        max_round = int(rows[0].get('회차', 0))
+        min_round = int(rows[-1].get('회차', 0))
+
+        reset = '\033[0m'
+        bold = '\033[1m'
+        cyan = '\033[96m'
+        gray = '\033[90m'
+
+        print()
+        print("╔" + "═" * 66 + "╗")
+        print(f"║{bold}{cyan}  모든 회차 당첨번호  ({min_round}회 ~ {max_round}회, 총 {total}회차){reset}")
+        print("╠" + "═" * 66 + "╣")
+
+        # 페이지네이션
+        page_size = 20
+        page = 0
+        total_pages = (total + page_size - 1) // page_size
+
+        while True:
+            start_idx = page * page_size
+            end_idx = min(start_idx + page_size, total)
+            page_rows = rows[start_idx:end_idx]
+
+            print(f"\n  {gray}── 페이지 {page + 1}/{total_pages} ──{reset}\n")
+
+            for row in page_rows:
+                self._print_round_row(row)
+
+            print(f"  {gray}── {start_idx + 1}~{end_idx} / 총 {total}회차 ──{reset}")
+            print()
+            print(f"  {bold}[N]{reset} 다음 페이지  {bold}[P]{reset} 이전 페이지  "
+                  f"{bold}[번호]{reset} 해당 페이지로 이동  {bold}[Q]{reset} 돌아가기")
+
+            cmd = input("\n  입력: ").strip().upper()
+
+            if cmd == 'Q' or cmd == '0':
+                break
+            elif cmd == 'N':
+                if page < total_pages - 1:
+                    page += 1
+                else:
+                    print(f"  {gray}마지막 페이지입니다.{reset}")
+            elif cmd == 'P':
+                if page > 0:
+                    page -= 1
+                else:
+                    print(f"  {gray}첫 페이지입니다.{reset}")
+            else:
+                try:
+                    target_page = int(cmd)
+                    if 1 <= target_page <= total_pages:
+                        page = target_page - 1
+                    else:
+                        print(f"  {gray}1~{total_pages} 사이의 페이지 번호를 입력하세요.{reset}")
+                except ValueError:
+                    print(f"  {gray}잘못된 입력입니다.{reset}")
+
+        print("╚" + "═" * 66 + "╝")
 
     def run_auto_update(self):
         """7. 데이터 수집 / 자동 업데이트"""
