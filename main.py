@@ -6,14 +6,12 @@ import sys
 from typing import List, Dict
 
 try:
-    from analyzers.lotto_data_collector import LottoDataCollector
     from analyzers.statistical_analyzer import StatisticalAnalyzer
     from analyzers.exclude_number_manager import ExcludeNumberManager
     from analyzers.comprehensive_analyzer import ComprehensiveAnalyzer
     from number_storage import NumberStorage
     from ai_pattern_learner import AIPatternLearner
     from features import (
-        AutoUpdateScheduler,
         WeightOptimizer,
     )
 except ImportError as e:
@@ -25,7 +23,6 @@ except ImportError as e:
 class LottoSystem:
     def __init__(self):
         self.data_file = '로또당첨번호.csv'
-        self.collector = LottoDataCollector()
         self.storage = NumberStorage()
         self.exclude_manager = ExcludeNumberManager()
         self.ai_learner = AIPatternLearner()
@@ -34,7 +31,6 @@ class LottoSystem:
         self.optimized_weights = None
         self.stat_analyzer = StatisticalAnalyzer(self.historical_data) if self.historical_data else None
         self.comp_analyzer = ComprehensiveAnalyzer(self.historical_data) if self.historical_data else None
-        self.scheduler = AutoUpdateScheduler(self.collector)
 
         # 시작 시 가중치 자동 최적화
         if self.historical_data:
@@ -63,34 +59,18 @@ class LottoSystem:
             if not silent:
                 print(f" 가중치 최적화 실패 (기본 가중치 사용): {e}")
 
-    def _refresh_data(self):
-        self.historical_data = self._load_data()
-        if self.historical_data:
-            self.stat_analyzer = StatisticalAnalyzer(
-                self.historical_data,
-                score_weights=self.optimized_weights,
-            )
-            self.comp_analyzer = ComprehensiveAnalyzer(self.historical_data)
-            # 새 데이터에 맞춰 가중치 재최적화
-            self._optimize_weights(silent=True)
-        else:
-            self.stat_analyzer = None
-            self.comp_analyzer = None
-
     def print_menu(self):
         print("\n" + "=" * 60)
         print(" 로또 번호 추천 시스템")
         print("=" * 60)
         print(" 1. 당첨 번호 분석")
         print(" 2. 통계 기반 번호 추천")
-        print(" 3. 제외 번호 관리")
-        print(" 4. 고급 추천 (제외/고정)")
-        print(" 5. 저장된 조합")
-        print(" 6. 고유 패턴 추천 (AI + 미출현)")
-        print(" 7. 데이터 수집 / 자동 업데이트")
-        print(" 8. 종합 패턴 분석 추천 (10개 지표)")
-        print(" 9. 전체 패턴 분석 기반 번호 추천")
-        print("10. 역(逆) 군중심리 추천 (당첨금 극대화)")
+        print(" 3. 고급 추천 (제외/고정)")
+        print(" 4. 저장된 조합")
+        print(" 5. 고유 패턴 추천 (AI + 미출현)")
+        print(" 6. 종합 패턴 분석 추천 (10개 지표)")
+        print(" 7. 전체 패턴 분석 기반 번호 추천")
+        print(" 8. 역(逆) 군중심리 추천 (당첨금 극대화)")
         print(" 0. 종료")
         print("=" * 60)
 
@@ -103,20 +83,16 @@ class LottoSystem:
             elif choice == '2':
                 self.recommend_numbers()
             elif choice == '3':
-                self.manage_exclude_numbers()
-            elif choice == '4':
                 self.recommend_with_exclusion()
-            elif choice == '5':
+            elif choice == '4':
                 self.manage_saved_combinations()
-            elif choice == '6':
+            elif choice == '5':
                 self.recommend_unique_patterns()
-            elif choice == '7':
-                self.run_auto_update()
-            elif choice == '8':
+            elif choice == '6':
                 self.comprehensive_recommend()
-            elif choice == '9':
+            elif choice == '7':
                 self.show_round_info()
-            elif choice == '10':
+            elif choice == '8':
                 self.recommend_anti_crowd()
             elif choice == '0':
                 print("\n 프로그램을 종료합니다.")
@@ -377,52 +353,6 @@ class LottoSystem:
         if save == 'y':
             self.storage.save_combination(rec['numbers'], "통계 추천")
             print("    저장되었습니다.")
-
-    def manage_exclude_numbers(self):
-        """3. 제외번호 관리"""
-        while True:
-            print("\n 제외번호 관리")
-            print("1. 제외번호 목록 보기")
-            print("2. 제외번호 추가")
-            print("3. 제외번호 삭제")
-            print("4. 초기화")
-            print("0. 뒤로가기")
-            sub_choice = input("선택: ").strip()
-            if sub_choice == '1':
-                self.exclude_manager.show_exclude_numbers()
-            elif sub_choice == '2':
-                nums = input("추가할 번호 (쉼표 구분): ")
-                try:
-                    raw_list = [int(n.strip()) for n in nums.split(',') if n.strip()]
-                    if not raw_list:
-                        print("번호를 입력해주세요.")
-                        continue
-                    invalid = [n for n in raw_list if not (1 <= n <= 45)]
-                    if invalid:
-                        print(f"유효하지 않은 번호: {invalid}  (1~45 사이만 허용)")
-                        continue
-                    self.exclude_manager.add_exclude_numbers(raw_list)
-                except ValueError:
-                    print("숫자만 입력해주세요. (예: 3, 7, 15)")
-            elif sub_choice == '3':
-                nums = input("삭제할 번호 (쉼표 구분): ")
-                try:
-                    raw_list = [int(n.strip()) for n in nums.split(',') if n.strip()]
-                    if not raw_list:
-                        print("번호를 입력해주세요.")
-                        continue
-                    invalid = [n for n in raw_list if not (1 <= n <= 45)]
-                    if invalid:
-                        print(f"유효하지 않은 번호: {invalid}  (1~45 사이만 허용)")
-                        continue
-                    self.exclude_manager.remove_exclude_numbers(raw_list)
-                except ValueError:
-                    print("숫자만 입력해주세요. (예: 3, 7, 15)")
-            elif sub_choice == '4':
-                if input("제외번호를 모두 초기화하시겠습니까? (y/n): ").lower() == 'y':
-                    self.exclude_manager.clear_exclude_numbers()
-            elif sub_choice == '0':
-                break
 
     def recommend_with_exclusion(self):
         """4. 고급 추천 (제외/고정)"""
@@ -1819,18 +1749,6 @@ class LottoSystem:
         print(f"\n  {yellow}💡 참고{reset}: 본 전략은 1등 확률을 높이지 않습니다.")
         print(f"     단지 {bold}당첨 시 분배 인원을 줄여 기댓값을 높이는{reset} "
               f"통계적 시도입니다.")
-
-    def run_auto_update(self):
-        """7. 데이터 수집 / 자동 업데이트"""
-        print("\n[Auto Update] 최신 당첨번호를 가져오는 중...")
-        result = self.scheduler.run_once()
-        print(f"- 시작 시각: {result['started_at']}")
-        print(f"- 업데이트 건수: {result['updated_count']}")
-        if result['updated']:
-            self._refresh_data()  # 내부에서 가중치 재최적화 포함
-            print(" 데이터 및 가중치가 갱신되었습니다.")
-        else:
-            print(" 이미 최신 데이터입니다.")
 
     def comprehensive_recommend(self):
         """8. 종합 패턴 분석 추천 (10개 지표)"""
