@@ -90,8 +90,7 @@ class LottoSystem:
         print("─" * 60)
         print("11. 🧬 통합 AI 추천 (마르코프+군집+DL+필터)")
         print("12. 📊 고급 분석 리포트 (핫/콜드/전이/군집)")
-        print("13. 🏆 전략 성능 평가 (백테스트 토너먼트)")
-        print("14. 📋 모든 회차정보 보기")
+        print("13. 📋 모든 회차정보 보기")
         print(" 0. 종료")
         print("=" * 60)
 
@@ -124,8 +123,6 @@ class LottoSystem:
             elif choice == '12':
                 self.advanced_analysis_report()
             elif choice == '13':
-                self.strategy_performance_eval()
-            elif choice == '14':
                 self.show_all_rounds()
             elif choice == '0':
                 print("\n 프로그램을 종료합니다.")
@@ -2069,76 +2066,6 @@ class LottoSystem:
             print(f"\n 최적 합계 범위 (80% 신뢰구간): {lo} ~ {hi}")
 
         print(f"\n{'═' * 60}")
-
-    # ══════════════════════════════════════════════════════════════
-    # 13. 전략 성능 평가 (백테스트 토너먼트)
-    # ══════════════════════════════════════════════════════════════
-
-    def strategy_performance_eval(self):
-        """13. 전략 성능 평가 — 롤링 백테스트 기반 토너먼트."""
-        if not self.historical_data or len(self.historical_data) < 250:
-            print("\n[WARN] 백테스트에 필요한 데이터가 부족합니다 (최소 250회차).")
-            return
-
-        from features.advanced_backtester import (
-            ABTestFramework, StrategyFactory
-        )
-
-        print("\n" + "=" * 60)
-        print(" 전략 성능 평가 (롤링 백테스트 토너먼트)")
-        print("=" * 60)
-        print(" 과거 데이터를 시간순으로 슬라이딩하며")
-        print(" 각 전략의 적중률을 비교합니다.")
-        print("-" * 60)
-
-        try:
-            max_rounds = int(input(" 테스트 회차 수 (10~100, 기본 30): ").strip() or "30")
-            max_rounds = max(10, min(100, max_rounds))
-        except ValueError:
-            max_rounds = 30
-
-        strategies = {
-            '통계분석': StrategyFactory.statistical_strategy,
-            '종합분석(10지표)': StrategyFactory.comprehensive_strategy,
-            '마르코프체인': StrategyFactory.markov_strategy,
-            '군집분석': StrategyFactory.cluster_strategy,
-            '하이브리드': StrategyFactory.hybrid_strategy,
-        }
-
-        print(f"\n {len(strategies)}개 전략 x {max_rounds}회차 평가 중...")
-        print(" (소요시간: 1~5분)")
-
-        framework = ABTestFramework(
-            self.historical_data,
-            train_window=200,
-            predictions_per_round=5,
-        )
-        result = framework.tournament(strategies, max_rounds=max_rounds)
-
-        print(f"\n{'═' * 60}")
-        print(" 토너먼트 결과 (3+ 적중률 기준)")
-        print(f"{'─' * 60}")
-        print(f" {'순위':<4} {'전략':<20} {'3+적중률':<12} {'평균매치'}")
-        print(f"{'─' * 60}")
-
-        for i, (name, rate) in enumerate(result['rankings'], 1):
-            detail = result['results'][name]
-            medal = ['1st', '2nd', '3rd'][i-1] if i <= 3 else '   '
-            print(f" {medal} {i}. {name:<18} {rate:.4f}       "
-                  f"{detail['avg_hits']:.3f}")
-
-        print(f"{'─' * 60}")
-        print(f" 최적 전략: {result['best']}")
-        print(f"{'═' * 60}")
-
-        if input("\n 상세 적중 분포를 확인하시겠습니까? (y/n): ").strip().lower() == 'y':
-            for name, detail in result['results'].items():
-                dist = detail['hit_distribution']
-                print(f"\n [{name}]")
-                for hits in range(7):
-                    cnt = dist.get(hits, 0)
-                    bar = '█' * min(cnt, 50)
-                    print(f"   {hits}개 일치: {cnt:4d}  {bar}")
 
 
 if __name__ == "__main__":
