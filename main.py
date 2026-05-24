@@ -13,7 +13,6 @@ try:
     from number_storage import NumberStorage
     from ai_pattern_learner import AIPatternLearner
     from features import (
-        AutoUpdateScheduler,
         WeightOptimizer,
     )
 except ImportError as e:
@@ -34,7 +33,6 @@ class LottoSystem:
         self.optimized_weights = None
         self.stat_analyzer = StatisticalAnalyzer(self.historical_data) if self.historical_data else None
         self.comp_analyzer = ComprehensiveAnalyzer(self.historical_data) if self.historical_data else None
-        self.scheduler = AutoUpdateScheduler(self.collector)
 
         # 시작 시 가중치 자동 최적화
         if self.historical_data:
@@ -83,13 +81,12 @@ class LottoSystem:
         print(" 4. 고급 추천 (제외/고정)")
         print(" 5. 저장된 조합")
         print(" 6. 고유 패턴 추천 (AI + 미출현)")
-        print(" 7. 데이터 수집 / 자동 업데이트")
-        print(" 8. 종합 패턴 분석 추천 (10개 지표)")
-        print(" 9. 전체 패턴 분석 기반 번호 추천")
+        print(" 7. 종합 패턴 분석 추천 (10개 지표)")
+        print(" 8. 전체 패턴 분석 기반 번호 추천")
         print("─" * 60)
-        print("10. 🧬 통합 AI 추천 (마르코프+군집+DL+필터)")
-        print("11. 📊 고급 분석 리포트 (핫/콜드/전이/군집)")
-        print("12. 📋 모든 회차정보 보기")
+        print(" 9. 🧬 통합 AI 추천 (마르코프+군집+DL+필터)")
+        print("10. 📊 고급 분석 리포트 (핫/콜드/전이/군집)")
+        print("11. 📋 모든 회차정보 보기")
         print(" 0. 종료")
         print("=" * 60)
 
@@ -110,16 +107,14 @@ class LottoSystem:
             elif choice == '6':
                 self.recommend_unique_patterns()
             elif choice == '7':
-                self.run_auto_update()
-            elif choice == '8':
                 self.comprehensive_recommend()
-            elif choice == '9':
+            elif choice == '8':
                 self.show_round_info()
-            elif choice == '10':
+            elif choice == '9':
                 self.integrated_ai_recommend()
-            elif choice == '11':
+            elif choice == '10':
                 self.advanced_analysis_report()
-            elif choice == '12':
+            elif choice == '11':
                 self.show_all_rounds()
             elif choice == '0':
                 print("\n 프로그램을 종료합니다.")
@@ -1623,18 +1618,6 @@ class LottoSystem:
                     print(f"  {gray}잘못된 입력입니다.{reset}")
 
         print("╚" + "═" * 66 + "╝")
-
-    def run_auto_update(self):
-        """7. 데이터 수집 / 자동 업데이트"""
-        print("\n[Auto Update] 최신 당첨번호를 가져오는 중...")
-        result = self.scheduler.run_once()
-        print(f"- 시작 시각: {result['started_at']}")
-        print(f"- 업데이트 건수: {result['updated_count']}")
-        if result['updated']:
-            self._refresh_data()  # 내부에서 가중치 재최적화 포함
-            print(" 데이터 및 가중치가 갱신되었습니다.")
-        else:
-            print(" 이미 최신 데이터입니다.")
 
     def comprehensive_recommend(self):
         """8. 종합 패턴 분석 추천 (10개 지표)"""
