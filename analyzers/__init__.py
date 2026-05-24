@@ -2,7 +2,6 @@
 로또 분석기 모듈
 """
 
-from .exclude_number_manager import ExcludeNumberManager
 from .lotto_data_collector import LottoDataCollector
 from .statistical_analyzer import StatisticalAnalyzer
 from .pattern_matching_analyzer import PatternMatchingAnalyzer
@@ -23,7 +22,6 @@ from .advanced_filters import (
 from .integrated_recommender import IntegratedRecommender
 
 __all__ = [
-    'ExcludeNumberManager',
     'LottoDataCollector',
     'StatisticalAnalyzer',
     'PatternMatchingAnalyzer',
