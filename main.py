@@ -8,7 +8,6 @@ from typing import List, Dict
 try:
     from analyzers.lotto_data_collector import LottoDataCollector
     from analyzers.statistical_analyzer import StatisticalAnalyzer
-    from analyzers.exclude_number_manager import ExcludeNumberManager
     from analyzers.comprehensive_analyzer import ComprehensiveAnalyzer
     from number_storage import NumberStorage
     from ai_pattern_learner import AIPatternLearner
@@ -26,7 +25,6 @@ class LottoSystem:
         self.data_file = '로또당첨번호.csv'
         self.collector = LottoDataCollector()
         self.storage = NumberStorage()
-        self.exclude_manager = ExcludeNumberManager()
         self.ai_learner = AIPatternLearner()
 
         self.historical_data = self._load_data()
@@ -77,16 +75,15 @@ class LottoSystem:
         print("=" * 60)
         print(" 1. 당첨 번호 분석")
         print(" 2. 통계 기반 번호 추천")
-        print(" 3. 제외 번호 관리")
-        print(" 4. 고급 추천 (제외/고정)")
-        print(" 5. 저장된 조합")
-        print(" 6. 고유 패턴 추천 (AI + 미출현)")
-        print(" 7. 종합 패턴 분석 추천 (10개 지표)")
-        print(" 8. 전체 패턴 분석 기반 번호 추천")
+        print(" 3. 고급 추천 (고정번호)")
+        print(" 4. 저장된 조합")
+        print(" 5. 고유 패턴 추천 (AI + 미출현)")
+        print(" 6. 종합 패턴 분석 추천 (10개 지표)")
+        print(" 7. 전체 패턴 분석 기반 번호 추천")
         print("─" * 60)
-        print(" 9. 🧬 통합 AI 추천 (마르코프+군집+DL+필터)")
-        print("10. 📊 고급 분석 리포트 (핫/콜드/전이/군집)")
-        print("11. 📋 모든 회차정보 보기")
+        print(" 8. 🧬 통합 AI 추천 (마르코프+군집+DL+필터)")
+        print(" 9. 📊 고급 분석 리포트 (핫/콜드/전이/군집)")
+        print("10. 📋 모든 회차정보 보기")
         print(" 0. 종료")
         print("=" * 60)
 
@@ -99,22 +96,20 @@ class LottoSystem:
             elif choice == '2':
                 self.recommend_numbers()
             elif choice == '3':
-                self.manage_exclude_numbers()
-            elif choice == '4':
                 self.recommend_with_exclusion()
-            elif choice == '5':
+            elif choice == '4':
                 self.manage_saved_combinations()
-            elif choice == '6':
+            elif choice == '5':
                 self.recommend_unique_patterns()
-            elif choice == '7':
+            elif choice == '6':
                 self.comprehensive_recommend()
-            elif choice == '8':
+            elif choice == '7':
                 self.show_round_info()
-            elif choice == '9':
+            elif choice == '8':
                 self.integrated_ai_recommend()
-            elif choice == '10':
+            elif choice == '9':
                 self.advanced_analysis_report()
-            elif choice == '11':
+            elif choice == '10':
                 self.show_all_rounds()
             elif choice == '0':
                 print("\n 프로그램을 종료합니다.")
@@ -376,74 +371,15 @@ class LottoSystem:
             self.storage.save_combination(rec['numbers'], "통계 추천")
             print("    저장되었습니다.")
 
-    def manage_exclude_numbers(self):
-        """3. 제외번호 관리"""
-        while True:
-            print("\n 제외번호 관리")
-            print("1. 제외번호 목록 보기")
-            print("2. 제외번호 추가")
-            print("3. 제외번호 삭제")
-            print("4. 초기화")
-            print("0. 뒤로가기")
-            sub_choice = input("선택: ").strip()
-            if sub_choice == '1':
-                self.exclude_manager.show_exclude_numbers()
-            elif sub_choice == '2':
-                nums = input("추가할 번호 (쉼표 구분): ")
-                try:
-                    raw_list = [int(n.strip()) for n in nums.split(',') if n.strip()]
-                    if not raw_list:
-                        print("번호를 입력해주세요.")
-                        continue
-                    invalid = [n for n in raw_list if not (1 <= n <= 45)]
-                    if invalid:
-                        print(f"유효하지 않은 번호: {invalid}  (1~45 사이만 허용)")
-                        continue
-                    self.exclude_manager.add_exclude_numbers(raw_list)
-                except ValueError:
-                    print("숫자만 입력해주세요. (예: 3, 7, 15)")
-            elif sub_choice == '3':
-                nums = input("삭제할 번호 (쉼표 구분): ")
-                try:
-                    raw_list = [int(n.strip()) for n in nums.split(',') if n.strip()]
-                    if not raw_list:
-                        print("번호를 입력해주세요.")
-                        continue
-                    invalid = [n for n in raw_list if not (1 <= n <= 45)]
-                    if invalid:
-                        print(f"유효하지 않은 번호: {invalid}  (1~45 사이만 허용)")
-                        continue
-                    self.exclude_manager.remove_exclude_numbers(raw_list)
-                except ValueError:
-                    print("숫자만 입력해주세요. (예: 3, 7, 15)")
-            elif sub_choice == '4':
-                if input("제외번호를 모두 초기화하시겠습니까? (y/n): ").lower() == 'y':
-                    self.exclude_manager.clear_exclude_numbers()
-            elif sub_choice == '0':
-                break
-
     def recommend_with_exclusion(self):
-        """4. 고급 추천 (제외/고정)"""
+        """3. 고급 추천 (고정번호)"""
         if not self.stat_analyzer:
             print("\n[WARN] 데이터가 없습니다.")
             return
-        print("\n 고급 번호 추천 (제외수 / 고정수 설정)")
-
-        exclude_nums = self.exclude_manager.get_exclude_numbers()
-        print(f"\n1 제외번호 설정")
-        if exclude_nums:
-            print(f"   현재 등록된 제외번호: {exclude_nums}")
-            if input("   제외번호를 수정하시겠습니까? (y/n): ").lower() == 'y':
-                self.manage_exclude_numbers()
-                exclude_nums = self.exclude_manager.get_exclude_numbers()
-        else:
-            print("   등록된 제외번호가 없습니다.")
-            if input("   제외번호를 추가하시겠습니까? (y/n): ").lower() == 'y':
-                self.manage_exclude_numbers()
-                exclude_nums = self.exclude_manager.get_exclude_numbers()
+        print("\n 고급 번호 추천 (고정수 설정)")
 
         fixed_nums = set()
-        print(f"\n2 고정번호 설정")
+        print(f"\n 고정번호 설정")
         if input("   고정수(반드시 포함할 번호)를 설정하시겠습니까? (y/n): ").lower() == 'y':
             while True:
                 user_input = input("   고정할 번호 입력 (쉼표 구분, Enter로 건너뜀): ").strip()
@@ -471,7 +407,6 @@ class LottoSystem:
         except ValueError:
             count = 5
         recommendations = self.stat_analyzer.generate_recommendations(
-            exclude_numbers=set(exclude_nums),
             fixed_numbers=fixed_nums,
             num_recommendations=count,
         )
@@ -479,7 +414,7 @@ class LottoSystem:
             print(f"\n[{i}] {rec['numbers']} (점수: {rec['score']:.2f})")
             save = input("   저장하시겠습니까? (y/n): ").lower()
             if save == 'y':
-                method_str = "제외/고정 추천"
+                method_str = "고정 추천"
                 if fixed_nums:
                     method_str += f"(고정:{list(fixed_nums)})"
                 self.storage.save_combination(rec['numbers'], method_str)
@@ -654,15 +589,10 @@ class LottoSystem:
             print("\n AI 예측 모델을 학습합니다...")
             self.ai_learner.train_models()
 
-        exclude_nums = self.exclude_manager.get_exclude_numbers()
-        if exclude_nums:
-            print(f"    제외번호: {exclude_nums}")
-
         candidate_count = 2000
         print(f"\n[CHECK] 후보 조합 {candidate_count}개 생성 및 AI 분석 중...")
 
         candidates = self.stat_analyzer.generate_unique_recommendations(
-            exclude_numbers=set(exclude_nums),
             num_recommendations=candidate_count,
         )
         if not candidates:

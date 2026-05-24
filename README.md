@@ -36,8 +36,7 @@ Lottery/
 ├── analyzers/
 │   ├── comprehensive_analyzer.py    # 10개 지표 종합 분석
 │   ├── statistical_analyzer.py      # 통계 기반 분석/추천
-│   ├── lotto_data_collector.py      # 동행복권 데이터 수집
-│   └── exclude_number_manager.py   # 제외번호 관리
+│   └── lotto_data_collector.py      # 동행복권 데이터 수집
 │
 ├── features/
 │   ├── auto_update_scheduler.py    # 데이터 자동 업데이트
