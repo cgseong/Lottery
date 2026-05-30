@@ -10,6 +10,7 @@ try:
     from analyzers.statistical_analyzer import StatisticalAnalyzer
     from analyzers.comprehensive_analyzer import ComprehensiveAnalyzer
     from number_storage import NumberStorage
+    from exclude_manager import ExcludeNumberManager
     from ai_pattern_learner import AIPatternLearner
     from features import (
         WeightOptimizer,
@@ -25,6 +26,7 @@ class LottoSystem:
         self.data_file = '로또당첨번호.csv'
         self.collector = LottoDataCollector()
         self.storage = NumberStorage()
+        self.exclude_manager = ExcludeNumberManager()
         self.ai_learner = AIPatternLearner()
 
         self.historical_data = self._load_data()
