@@ -1,24 +1,19 @@
-아래 순서대로 실행하면 됩니다.
+# 1. 프로젝트 폴더로 이동
+cd Lottery
 
-작업 폴더 이동
+# 2. (권장) 가상환경 생성 및 활성화
+python -m venv .venv
+source .venv/bin/activate        # Linux/Mac
+# .\.venv\Scripts\Activate.ps1   # Windows PowerShell
 
-cd "C:\Users\cgseo\Documents\GitHub\Lottery"
-(권장) 가상환경 활성화
-
-이미 .venv가 있으면:
-.\.venv\Scripts\Activate.ps1
-패키지 설치(최초 1회)
-
+# 3. 패키지 설치
 pip install -r requirements.txt
-프로그램 실행
 
+# 4. 프로그램 실행
 python main.py
-실행 후 메뉴 사용:
 
-2번: 통계 기반 추천(개선된 점수식 반영)
-12번: 패턴 기반 추천(AI 조합 점수 개선 반영)
-15번: 백테스트 + trials 튜닝 결과 확인
-16번: 전략 프로필 추천
-빠른 확인 포인트:
+# 5. 최초 실행 시: 메뉴에서 "7" 선택하여 동행복권에서 데이터 수집
+#    이후 2, 3, 5, 6, 7, 8번 등으로 번호 추천 사용
 
-15번 실행 시 Backtest Tuning 섹션에 best_trials가 출력되면 패치가 정상 반영된 상태입니다.
+# 6. 테스트 실행
+pytest
