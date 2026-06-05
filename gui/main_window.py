@@ -22,13 +22,13 @@ from gui.pages.history_page import HistoryPage
 
 
 class DataLoadWorker(QThread):
-    """데이터 로드 및 가중치 최적화를 백그라운드에서 수행"""
+    """로또당첨번호.csv를 로드하고 분석기를 초기화하는 백그라운드 워커"""
     finished = Signal(object, object, object, object)
     progress = Signal(str)
 
-    def __init__(self, data_file: str):
+    def __init__(self, csv_path: str):
         super().__init__()
-        self.data_file = data_file
+        self.csv_path = csv_path
 
     def run(self):
         try:
@@ -37,19 +37,22 @@ class DataLoadWorker(QThread):
             if project_root not in sys.path:
                 sys.path.insert(0, project_root)
 
-            from utils.file_utils import load_csv_data
+            import csv
             from analyzers.statistical_analyzer import StatisticalAnalyzer
             from analyzers.comprehensive_analyzer import ComprehensiveAnalyzer
             from features import WeightOptimizer
 
-            self.progress.emit("데이터 로딩 중...")
-            data = load_csv_data(self.data_file)
+            self.progress.emit("로또당첨번호.csv 로딩 중...")
+
+            # 로또당첨번호.csv 직접 읽기 (인코딩 자동 감지)
+            data = self._load_csv(self.csv_path)
 
             if not data:
+                self.progress.emit("⚠️ 로또당첨번호.csv 파일을 찾을 수 없거나 비어있습니다.")
                 self.finished.emit(None, None, None, None)
                 return
 
-            self.progress.emit(f"데이터 로드 완료 ({len(data)}회차). 가중치 최적화 중...")
+            self.progress.emit(f"로또당첨번호.csv 로드 완료 ({len(data)}회차). 가중치 최적화 중...")
 
             stat_analyzer = StatisticalAnalyzer(data)
             comp_analyzer = ComprehensiveAnalyzer(data)
@@ -65,6 +68,25 @@ class DataLoadWorker(QThread):
         except Exception as e:
             self.progress.emit(f"오류: {e}")
             self.finished.emit(None, None, None, None)
+
+    def _load_csv(self, filepath: str) -> list:
+        """로또당첨번호.csv를 인코딩 자동 감지로 읽어 리스트로 반환합니다."""
+        import csv as _csv
+
+        if not os.path.exists(filepath):
+            return []
+
+        encodings = ('utf-8', 'cp949', 'euc-kr')
+        for enc in encodings:
+            try:
+                with open(filepath, 'r', encoding=enc, newline='') as f:
+                    reader = _csv.DictReader(f)
+                    data = list(reader)
+                    if data and any('번호1' in str(k) for k in data[0].keys()):
+                        return data
+            except (UnicodeDecodeError, Exception):
+                continue
+        return []
 
 
 class MainWindow(QMainWindow):
@@ -233,11 +255,16 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.data_status_label)
 
     def _load_data(self):
-        """백그라운드에서 데이터 로드"""
+        """백그라운드에서 로또당첨번호.csv 로드"""
+        # app_desktop.py가 있는 프로젝트 루트에서 로또당첨번호.csv를 찾음
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        data_file = os.path.join(project_root, '로또당첨번호.csv')
+        csv_path = os.path.join(project_root, '로또당첨번호.csv')
 
-        self.worker = DataLoadWorker(data_file)
+        # 프로젝트 루트에 없으면 현재 작업 디렉터리에서도 탐색
+        if not os.path.exists(csv_path):
+            csv_path = os.path.join(os.getcwd(), '로또당첨번호.csv')
+
+        self.worker = DataLoadWorker(csv_path)
         self.worker.progress.connect(self._on_load_progress)
         self.worker.finished.connect(self._on_load_finished)
         self.worker.start()
@@ -253,14 +280,14 @@ class MainWindow(QMainWindow):
 
         if data:
             self.status_label.setText("준비 완료")
-            self.data_status_label.setText(f"📊 {len(data)}회차 데이터 로드됨")
+            self.data_status_label.setText(f"📊 로또당첨번호.csv — {len(data)}회차 로드됨")
 
             # 각 페이지에 데이터 전달
             for page in self.pages.values():
                 page.set_data(data, stat_analyzer, comp_analyzer, weights)
         else:
-            self.status_label.setText("⚠️ 데이터 로드 실패")
-            self.data_status_label.setText("데이터 파일을 확인해주세요")
+            self.status_label.setText("⚠️ 로또당첨번호.csv 로드 실패")
+            self.data_status_label.setText("로또당첨번호.csv 파일을 확인해주세요")
 
     def _on_nav_changed(self, index: int):
         """네비게이션 메뉴 변경 시 페이지 전환"""
