@@ -22,49 +22,83 @@ from gui.pages.history_page import HistoryPage
 
 
 class DataLoadWorker(QThread):
-    """데이터 로드 및 가중치 최적화를 백그라운드에서 수행"""
-    finished = Signal(object, object, object, object)
+    """로또당첨번호.csv를 로드하고 분석기를 초기화하는 백그라운드 워커
+
+    2단계로 동작합니다:
+      1단계: CSV 로드 + 분석기 초기화 → data_ready 시그널 발생 (UI 즉시 업데이트)
+      2단계: 가중치 최적화 완료 → finished 시그널 발생
+    """
+    data_ready = Signal(object, object, object)  # data, stat_analyzer, comp_analyzer
+    finished = Signal(object)  # optimized_weights
     progress = Signal(str)
 
-    def __init__(self, data_file: str):
+    def __init__(self, csv_path: str):
         super().__init__()
-        self.data_file = data_file
+        self.csv_path = csv_path
 
     def run(self):
         try:
+            import csv as _csv
+
             # 프로젝트 루트를 path에 추가
             project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             if project_root not in sys.path:
                 sys.path.insert(0, project_root)
 
-            from utils.file_utils import load_csv_data
             from analyzers.statistical_analyzer import StatisticalAnalyzer
             from analyzers.comprehensive_analyzer import ComprehensiveAnalyzer
             from features import WeightOptimizer
 
-            self.progress.emit("데이터 로딩 중...")
-            data = load_csv_data(self.data_file)
+            # ── 1단계: CSV 로드 ──
+            self.progress.emit("로또당첨번호.csv 로딩 중...")
+            data = self._load_csv(self.csv_path)
 
             if not data:
-                self.finished.emit(None, None, None, None)
+                self.progress.emit("⚠️ 로또당첨번호.csv를 찾을 수 없거나 비어있습니다.")
+                self.data_ready.emit(None, None, None)
+                self.finished.emit(None)
                 return
 
-            self.progress.emit(f"데이터 로드 완료 ({len(data)}회차). 가중치 최적화 중...")
+            self.progress.emit(f"{len(data)}회차 로드 완료. 분석기 초기화 중...")
 
             stat_analyzer = StatisticalAnalyzer(data)
             comp_analyzer = ComprehensiveAnalyzer(data)
 
-            # 가중치 최적화
+            # 1단계 완료 → UI에 즉시 데이터 전달 (여기서 페이지 업데이트됨)
+            self.data_ready.emit(data, stat_analyzer, comp_analyzer)
+
+            # ── 2단계: 가중치 최적화 (시간이 오래 걸릴 수 있음) ──
+            self.progress.emit(f"{len(data)}회차 기반 가중치 최적화 중... (잠시 대기)")
             optimizer = WeightOptimizer(data)
             best_weights = optimizer.optimize()
             stat_analyzer.score_weights = best_weights
 
-            self.progress.emit("초기화 완료!")
-            self.finished.emit(data, stat_analyzer, comp_analyzer, best_weights)
+            self.progress.emit("준비 완료")
+            self.finished.emit(best_weights)
 
         except Exception as e:
             self.progress.emit(f"오류: {e}")
-            self.finished.emit(None, None, None, None)
+            self.data_ready.emit(None, None, None)
+            self.finished.emit(None)
+
+    def _load_csv(self, filepath: str) -> list:
+        """로또당첨번호.csv를 인코딩 자동 감지로 읽어 dict 리스트로 반환합니다."""
+        import csv as _csv
+
+        if not os.path.exists(filepath):
+            return []
+
+        encodings = ('utf-8', 'cp949', 'euc-kr')
+        for enc in encodings:
+            try:
+                with open(filepath, 'r', encoding=enc, newline='') as f:
+                    reader = _csv.DictReader(f)
+                    data = list(reader)
+                    if data and any('번호1' in str(k) for k in data[0].keys()):
+                        return data
+            except (UnicodeDecodeError, Exception):
+                continue
+        return []
 
 
 class MainWindow(QMainWindow):
@@ -233,34 +267,67 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.data_status_label)
 
     def _load_data(self):
-        """백그라운드에서 데이터 로드"""
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        data_file = os.path.join(project_root, '로또당첨번호.csv')
+        """백그라운드에서 로또당첨번호.csv 로드 (2단계: 즉시 표시 → 최적화)"""
+        # 여러 경로에서 로또당첨번호.csv 탐색
+        csv_path = self._find_csv_file()
 
-        self.worker = DataLoadWorker(data_file)
+        if not csv_path:
+            self.status_label.setText("⚠️ 로또당첨번호.csv 파일을 찾을 수 없습니다")
+            self.data_status_label.setText("프로그램과 같은 폴더에 로또당첨번호.csv가 필요합니다")
+            return
+
+        self.worker = DataLoadWorker(csv_path)
         self.worker.progress.connect(self._on_load_progress)
-        self.worker.finished.connect(self._on_load_finished)
+        self.worker.data_ready.connect(self._on_data_ready)
+        self.worker.finished.connect(self._on_optimize_finished)
         self.worker.start()
+
+    def _find_csv_file(self) -> str:
+        """로또당첨번호.csv 파일을 여러 경로에서 탐색합니다."""
+        candidates = [
+            # 1. 현재 작업 디렉터리
+            os.path.join(os.getcwd(), '로또당첨번호.csv'),
+            # 2. app_desktop.py가 있는 디렉터리 (프로젝트 루트)
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '로또당첨번호.csv'),
+            # 3. main_window.py 기준 상위 디렉터리
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '로또당첨번호.csv'),
+            # 4. sys.argv[0] (실행 스크립트) 기준
+            os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '로또당첨번호.csv') if sys.argv else '',
+        ]
+        for path in candidates:
+            if path and os.path.exists(path):
+                return os.path.abspath(path)
+        return ""
 
     def _on_load_progress(self, message: str):
         self.status_label.setText(message)
 
-    def _on_load_finished(self, data, stat_analyzer, comp_analyzer, weights):
+    def _on_data_ready(self, data, stat_analyzer, comp_analyzer):
+        """1단계 완료: 데이터 로드됨 → 즉시 페이지에 전달하여 UI 업데이트"""
         self.historical_data = data
         self.stat_analyzer = stat_analyzer
         self.comp_analyzer = comp_analyzer
-        self.optimized_weights = weights
 
         if data:
-            self.status_label.setText("준비 완료")
-            self.data_status_label.setText(f"📊 {len(data)}회차 데이터 로드됨")
+            self.data_status_label.setText(f"📊 로또당첨번호.csv — {len(data)}회차 로드됨")
 
-            # 각 페이지에 데이터 전달
+            # 각 페이지에 데이터 전달 → 분석 결과 즉시 표시
             for page in self.pages.values():
-                page.set_data(data, stat_analyzer, comp_analyzer, weights)
+                page.set_data(data, stat_analyzer, comp_analyzer, None)
         else:
-            self.status_label.setText("⚠️ 데이터 로드 실패")
-            self.data_status_label.setText("데이터 파일을 확인해주세요")
+            self.status_label.setText("⚠️ 로또당첨번호.csv 로드 실패")
+            self.data_status_label.setText("로또당첨번호.csv 파일을 확인해주세요")
+
+    def _on_optimize_finished(self, weights):
+        """2단계 완료: 가중치 최적화됨 → stat_analyzer에 반영"""
+        self.optimized_weights = weights
+
+        if weights and self.stat_analyzer:
+            self.stat_analyzer.score_weights = weights
+            self.status_label.setText("준비 완료")
+        elif self.historical_data:
+            # 최적화 실패해도 데이터는 있으므로 사용 가능
+            self.status_label.setText("준비 완료 (기본 가중치 사용)")
 
     def _on_nav_changed(self, index: int):
         """네비게이션 메뉴 변경 시 페이지 전환"""
