@@ -32,9 +32,10 @@ class IntegratedWorker(QThread):
 
             self.progress.emit("통합 AI 엔진 초기화 중...")
             recommender = IntegratedRecommender(self.historical_data)
+            recommender.initialize()
 
             self.progress.emit("5개 분석 엔진 앙상블 + 8종 필터 적용 중...")
-            results = recommender.recommend(num_recommendations=5)
+            results = recommender.generate_recommendations(num_recommendations=5)
 
             self.progress.emit("완료!")
             self.finished.emit(results or [])
