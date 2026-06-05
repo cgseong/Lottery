@@ -1,9 +1,16 @@
 from utils.constants import MAX_LOTTO_NUMBER
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
+
+try:
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as patches
+    _MPL_AVAILABLE = True
+except (ImportError, AttributeError, Exception):
+    _MPL_AVAILABLE = False
 
 class LottoVisualizer:
     def __init__(self):
+        if not _MPL_AVAILABLE:
+            return
         # 한글 폰트 설정 (Windows 기본 폰트 시도)
         plt.rcParams['font.family'] = 'Malgun Gothic'
         plt.rcParams['axes.unicode_minus'] = False

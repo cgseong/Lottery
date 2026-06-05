@@ -13,13 +13,13 @@ from utils.logging_config import get_logger
 
 _log = get_logger(__name__)
 
-# matplotlib 관련 import
+# matplotlib 관련 import (numpy 버전 충돌 시에도 안전하게 처리)
 try:
     import matplotlib.pyplot as plt
     import matplotlib.patches as patches
     from matplotlib.patches import FancyArrowPatch
     LINE_PATTERN_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError, Exception):
     LINE_PATTERN_AVAILABLE = False
 
 
