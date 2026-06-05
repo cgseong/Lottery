@@ -84,7 +84,15 @@ class AITrainWorker(QThread):
             self.finished.emit({'results': top5})
 
         except Exception as e:
-            self.progress.emit(f"오류: {e}")
+            err_msg = str(e)
+            # numpy/scikit-learn 바이너리 비호환 감지
+            if 'dtype size changed' in err_msg or 'binary incompatibility' in err_msg:
+                self.progress.emit(
+                    "⚠️ numpy/scikit-learn 버전 호환 오류. "
+                    "터미널에서 실행: pip install --upgrade numpy scikit-learn"
+                )
+            else:
+                self.progress.emit(f"오류: {e}")
             self.finished.emit({})
 
 
