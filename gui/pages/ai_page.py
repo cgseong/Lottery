@@ -193,8 +193,16 @@ class AIPage(BasePage):
         """
 
     def _run_ai(self):
-        if not self.stat_analyzer or not self.historical_data:
-            QMessageBox.warning(self, "경고", "데이터가 로드되지 않았습니다.")
+        if not self.historical_data:
+            QMessageBox.warning(self, "경고", "로또당첨번호.csv 파일을 찾을 수 없습니다.")
+            return
+        if not self.stat_analyzer:
+            QMessageBox.warning(
+                self, "경고",
+                "분석기가 초기화되지 않았습니다.\n\n"
+                "터미널에서 아래 명령어를 실행해주세요:\n"
+                "pip install --upgrade matplotlib numpy"
+            )
             return
 
         self.run_btn.setEnabled(False)

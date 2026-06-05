@@ -183,50 +183,189 @@ class AnalysisPage(BasePage):
         self._run_analysis()
 
     def _run_analysis(self):
-        if not self.stat_analyzer or not self.historical_data:
+        if not self.historical_data:
+            self.latest_round_label.setText("로또당첨번호.csv 파일을 확인해주세요.")
             return
 
-        # 최신 당첨번호
+        # ── 최신 당첨번호 (CSV 데이터에서 직접 읽기) ──
         sorted_data = sorted(
             self.historical_data,
             key=lambda x: int(x.get('회차', 0)),
             reverse=True
         )
-        if sorted_data:
-            latest = sorted_data[0]
-            round_no = latest.get('회차', '?')
-            date_str = latest.get('날짜', '')
-            self.latest_round_label.setText(f"{round_no}회 ({date_str})")
 
-            # 기존 공 위젯 제거
-            while self.balls_layout.count() > 1:
-                item = self.balls_layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
+        self._display_latest_numbers(sorted_data)
+        self._display_basic_stats(sorted_data)
 
-            # 공 삽입 (stretch 앞에)
-            for i in range(1, 7):
-                try:
-                    num = int(latest[f'번호{i}'])
-                    ball = NumberBallWidget(num, size=48)
-                    self.balls_layout.insertWidget(
-                        self.balls_layout.count() - 1, ball
-                    )
-                except (ValueError, TypeError):
-                    pass
+        # stat_analyzer가 있으면 고급 분석도 표시
+        if self.stat_analyzer:
+            self._display_advanced_analysis()
 
-            # 보너스
+    def _display_latest_numbers(self, sorted_data: list):
+        """CSV에서 최신 당첨번호를 읽어 공 위젯으로 표시"""
+        if not sorted_data:
+            return
+
+        latest = sorted_data[0]
+        round_no = latest.get('회차', '?')
+        date_str = latest.get('날짜', '')
+        self.latest_round_label.setText(f"{round_no}회 ({date_str})")
+
+        # 기존 공 위젯 제거 (마지막 stretch 제외)
+        while self.balls_layout.count() > 1:
+            item = self.balls_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        # 번호 공 삽입
+        for i in range(1, 7):
             try:
-                bonus = int(latest.get('보너스번호', ''))
-                plus_label = QLabel("+")
-                plus_label.setStyleSheet("font-size: 18px; color: #7f8c8d; padding: 0 5px;")
-                self.balls_layout.insertWidget(self.balls_layout.count() - 1, plus_label)
-
-                bonus_ball = NumberBallWidget(bonus, size=48, is_bonus=True)
-                self.balls_layout.insertWidget(self.balls_layout.count() - 1, bonus_ball)
-            except (ValueError, TypeError):
+                num = int(latest[f'번호{i}'])
+                ball = NumberBallWidget(num, size=48)
+                self.balls_layout.insertWidget(
+                    self.balls_layout.count() - 1, ball
+                )
+            except (ValueError, TypeError, KeyError):
                 pass
 
+        # 보너스 번호
+        try:
+            bonus = int(latest.get('보너스번호', ''))
+            plus_label = QLabel("+")
+            plus_label.setStyleSheet("font-size: 18px; color: #7f8c8d; padding: 0 5px;")
+            self.balls_layout.insertWidget(self.balls_layout.count() - 1, plus_label)
+
+            bonus_ball = NumberBallWidget(bonus, size=48, is_bonus=True)
+            self.balls_layout.insertWidget(self.balls_layout.count() - 1, bonus_ball)
+        except (ValueError, TypeError):
+            pass
+
+    def _display_basic_stats(self, sorted_data: list):
+        """CSV 데이터에서 직접 기본 통계를 계산하여 표시 (stat_analyzer 불필요)"""
+        from collections import Counter
+
+        if not sorted_data:
+            return
+
+        # 모든 번호 추출
+        all_numbers = []
+        for row in sorted_data:
+            for i in range(1, 7):
+                try:
+                    all_numbers.append(int(row[f'번호{i}']))
+                except (ValueError, TypeError, KeyError):
+                    pass
+
+        if not all_numbers:
+            return
+
+        # 빈도 분석
+        counter = Counter(all_numbers)
+        most_common = counter.most_common(5)
+        least_common = counter.most_common()[:-6:-1]  # 하위 5개
+
+        most_str = ", ".join([f"<b>{n}번</b>({c}회)" for n, c in most_common])
+        least_str = ", ".join([f"{n}번({c}회)" for n, c in least_common])
+        self.most_common_label.setText(f"📈 <b>최다 출현:</b> {most_str}")
+        self.least_common_label.setText(f"📉 <b>최소 출현:</b> {least_str}")
+
+        # Hot/Cold (최근 20회)
+        recent_20 = sorted_data[:20]
+        recent_numbers = []
+        for row in recent_20:
+            for i in range(1, 7):
+                try:
+                    recent_numbers.append(int(row[f'번호{i}']))
+                except (ValueError, TypeError, KeyError):
+                    pass
+
+        recent_counter = Counter(recent_numbers)
+        hot_nums = recent_counter.most_common(5)
+        all_nums_set = set(range(1, 46))
+        appeared_set = set(recent_numbers)
+        cold_nums = sorted(all_nums_set - appeared_set)[:10]
+
+        hot_str = ", ".join([f"<b>{n}번</b>({c}회)" for n, c in hot_nums])
+        cold_str = ", ".join([f"{n}번" for n in cold_nums])
+        self.hot_label.setText(f"🔥 <b>Hot:</b> {hot_str}")
+        self.cold_label.setText(f"❄️ <b>Cold:</b> {cold_str}")
+
+        # 합계 통계
+        sums = []
+        for row in sorted_data:
+            try:
+                s = sum(int(row[f'번호{i}']) for i in range(1, 7))
+                sums.append(s)
+            except (ValueError, TypeError, KeyError):
+                pass
+
+        if sums:
+            avg_sum = sum(sums) / len(sums)
+            self.sum_label.setText(
+                f"평균 {avg_sum:.1f} | 최소 {min(sums)} | 최대 {max(sums)}"
+            )
+
+        # 홀짝 통계
+        odd_counts = []
+        for row in sorted_data:
+            try:
+                nums = [int(row[f'번호{i}']) for i in range(1, 7)]
+                odd_counts.append(sum(1 for n in nums if n % 2 != 0))
+            except (ValueError, TypeError, KeyError):
+                pass
+
+        if odd_counts:
+            avg_odd = sum(odd_counts) / len(odd_counts)
+            avg_even = 6 - avg_odd
+            self.odd_even_label.setText(
+                f"평균 홀수 {avg_odd:.1f}개 / 짝수 {avg_even:.1f}개"
+            )
+
+        # 구간분포
+        section_counts = {'1-15': 0, '16-30': 0, '31-45': 0}
+        total_nums = 0
+        for row in sorted_data:
+            for i in range(1, 7):
+                try:
+                    n = int(row[f'번호{i}'])
+                    if 1 <= n <= 15:
+                        section_counts['1-15'] += 1
+                    elif 16 <= n <= 30:
+                        section_counts['16-30'] += 1
+                    elif 31 <= n <= 45:
+                        section_counts['31-45'] += 1
+                    total_nums += 1
+                except (ValueError, TypeError, KeyError):
+                    pass
+
+        if total_nums > 0:
+            self.section_label.setText(
+                f"1-15: {section_counts['1-15']/total_nums*100:.1f}% | "
+                f"16-30: {section_counts['16-30']/total_nums*100:.1f}% | "
+                f"31-45: {section_counts['31-45']/total_nums*100:.1f}%"
+            )
+
+        # 연속번호 패턴
+        consec_counts = Counter()
+        for row in sorted_data:
+            try:
+                nums = sorted(int(row[f'번호{i}']) for i in range(1, 7))
+                pairs = sum(1 for a, b in zip(nums, nums[1:]) if b - a == 1)
+                consec_counts[pairs] += 1
+            except (ValueError, TypeError, KeyError):
+                pass
+
+        total_rounds = sum(consec_counts.values())
+        if total_rounds > 0:
+            parts = []
+            for k in [0, 1, 2, 3]:
+                if k in consec_counts:
+                    pct = consec_counts[k] / total_rounds * 100
+                    parts.append(f"{k}쌍: {pct:.1f}%")
+            self.consec_label.setText(" | ".join(parts))
+
+    def _display_advanced_analysis(self):
+        """stat_analyzer가 있을 때 고급 분석 결과로 덮어쓰기"""
         # Hot/Cold 분석
         trends = self.stat_analyzer.analyze_recent_trends(recent_count=20)
         if trends:
@@ -249,21 +388,23 @@ class AnalysisPage(BasePage):
 
         # 합계 통계
         sum_stats = self.stat_analyzer.analyze_sum_range()
-        self.sum_label.setText(
-            f"평균 {sum_stats.get('avg_sum', 0):.1f} | "
-            f"최소 {sum_stats.get('min_sum', 0)} | 최대 {sum_stats.get('max_sum', 0)}"
-        )
+        if sum_stats:
+            self.sum_label.setText(
+                f"평균 {sum_stats.get('avg_sum', 0):.1f} | "
+                f"최소 {sum_stats.get('min_sum', 0)} | 최대 {sum_stats.get('max_sum', 0)}"
+            )
 
         # 홀짝 통계
         odd_even = self.stat_analyzer.analyze_odd_even()
-        self.odd_even_label.setText(
-            f"평균 홀수 {odd_even.get('avg_odd', 0):.1f}개 / "
-            f"짝수 {odd_even.get('avg_even', 0):.1f}개"
-        )
+        if odd_even:
+            self.odd_even_label.setText(
+                f"평균 홀수 {odd_even.get('avg_odd', 0):.1f}개 / "
+                f"짝수 {odd_even.get('avg_even', 0):.1f}개"
+            )
 
         # 구간분포
         section = self.stat_analyzer.analyze_section_distribution()
-        if 'percentages' in section:
+        if section and 'percentages' in section:
             pct = section['percentages']
             self.section_label.setText(
                 f"1-15: {pct.get('1-15', 0):.1f}% | "
@@ -273,7 +414,7 @@ class AnalysisPage(BasePage):
 
         # 연속번호 패턴
         consec = self.stat_analyzer.analyze_consecutive_patterns()
-        if 'percentages' in consec:
+        if consec and 'percentages' in consec:
             pct = consec['percentages']
             parts = []
             for k in [0, 1, 2, 3]:
