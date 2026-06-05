@@ -133,7 +133,12 @@ class AdvancedPage(BasePage):
 
     def _generate(self):
         if not self.stat_analyzer:
-            QMessageBox.warning(self, "경고", "데이터가 로드되지 않았습니다.")
+            QMessageBox.warning(
+                self, "경고",
+                "분석기가 초기화되지 않았습니다.\n\n"
+                "터미널에서 아래 명령어를 실행해주세요:\n"
+                "pip install --upgrade matplotlib numpy"
+            )
             return
 
         fixed = self.fixed_selector.get_selected()
