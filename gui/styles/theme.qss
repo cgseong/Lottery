@@ -1,0 +1,138 @@
+/* 로또 번호 추천 시스템 - 글로벌 테마 */
+
+/* 메인 윈도우 */
+QMainWindow {
+    background-color: #f5f6fa;
+}
+
+/* 공통 레이블 */
+QLabel {
+    color: #2c3e50;
+}
+
+/* 공통 버튼 */
+QPushButton {
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+/* 스크롤바 */
+QScrollBar:vertical {
+    border: none;
+    background-color: #f0f0f0;
+    width: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #bdc3c7;
+    border-radius: 5px;
+    min-height: 30px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #95a5a6;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background-color: #f0f0f0;
+    height: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #bdc3c7;
+    border-radius: 5px;
+    min-width: 30px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: #95a5a6;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+
+/* 스핀박스 */
+QSpinBox {
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    padding: 4px 8px;
+    background-color: white;
+}
+
+QSpinBox:focus {
+    border-color: #3498db;
+}
+
+/* 입력 필드 */
+QLineEdit {
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    padding: 6px 10px;
+    background-color: white;
+}
+
+QLineEdit:focus {
+    border-color: #3498db;
+}
+
+/* 그룹박스 */
+QGroupBox {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-top: 10px;
+    padding-top: 15px;
+    background-color: white;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 15px;
+    padding: 0 8px;
+    color: #2c3e50;
+    font-weight: bold;
+}
+
+/* 툴팁 */
+QToolTip {
+    background-color: #34495e;
+    color: white;
+    border: none;
+    padding: 5px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+/* 프로그레스 바 */
+QProgressBar {
+    border: 1px solid #bdc3c7;
+    border-radius: 5px;
+    text-align: center;
+    height: 18px;
+    background-color: #ecf0f1;
+}
+
+QProgressBar::chunk {
+    background-color: #3498db;
+    border-radius: 4px;
+}
+
+/* 메시지 박스 */
+QMessageBox {
+    background-color: white;
+}
+
+QMessageBox QPushButton {
+    min-width: 80px;
+    padding: 6px 16px;
+}
