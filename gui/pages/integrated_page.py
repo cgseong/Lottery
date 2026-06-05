@@ -32,15 +32,39 @@ class IntegratedWorker(QThread):
 
             self.progress.emit("통합 AI 엔진 초기화 중...")
             recommender = IntegratedRecommender(self.historical_data)
-            recommender.initialize()
+
+            try:
+                recommender.initialize()
+            except Exception as init_err:
+                err_msg = str(init_err)
+                if 'dtype size changed' in err_msg or 'binary incompatibility' in err_msg:
+                    self.progress.emit(
+                        "⚠️ numpy/scikit-learn 버전 호환 오류. "
+                        "터미널에서 실행: pip install --upgrade numpy scikit-learn"
+                    )
+                else:
+                    self.progress.emit(f"⚠️ 초기화 오류: {init_err}")
+                self.finished.emit([])
+                return
 
             self.progress.emit("5개 분석 엔진 앙상블 + 8종 필터 적용 중...")
             results = recommender.generate_recommendations(num_recommendations=5)
 
-            self.progress.emit("완료!")
+            if results:
+                self.progress.emit("완료!")
+            else:
+                self.progress.emit("⚠️ 필터 조건을 만족하는 조합을 찾지 못했습니다. 다시 시도해주세요.")
             self.finished.emit(results or [])
+
         except Exception as e:
-            self.progress.emit(f"오류: {e}")
+            err_msg = str(e)
+            if 'dtype size changed' in err_msg or 'binary incompatibility' in err_msg:
+                self.progress.emit(
+                    "⚠️ numpy/scikit-learn 버전 호환 오류. "
+                    "터미널에서 실행: pip install --upgrade numpy scikit-learn"
+                )
+            else:
+                self.progress.emit(f"오류: {e}")
             self.finished.emit([])
 
 
@@ -163,7 +187,6 @@ class IntegratedPage(BasePage):
     def _on_finished(self, results: list):
         self.run_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
-        self.progress_label.setText("")
 
         while self.results_layout.count():
             item = self.results_layout.takeAt(0)
@@ -171,7 +194,15 @@ class IntegratedPage(BasePage):
                 item.widget().deleteLater()
 
         if not results:
-            self.results_layout.addWidget(QLabel("통합 AI 추천 번호를 생성할 수 없습니다."))
+            # progress_label에 표시된 에러/안내 메시지를 결과 영역에도 표시
+            msg = self.progress_label.text()
+            if msg and '⚠️' in msg:
+                error_label = QLabel(msg)
+                error_label.setWordWrap(True)
+                error_label.setStyleSheet("color: #e74c3c; font-size: 13px; padding: 10px;")
+                self.results_layout.addWidget(error_label)
+            else:
+                self.results_layout.addWidget(QLabel("통합 AI 추천 번호를 생성할 수 없습니다."))
             return
 
         for i, rec in enumerate(results, 1):

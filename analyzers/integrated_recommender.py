@@ -55,7 +55,7 @@ class IntegratedRecommender:
         self._is_initialized = False
 
     def initialize(self) -> None:
-        """모든 분석기를 초기화합니다."""
+        """모든 분석기를 초기화합니다. 개별 분석기 실패 시에도 계속 진행합니다."""
         if self._is_initialized:
             return
 
@@ -64,19 +64,45 @@ class IntegratedRecommender:
         from analyzers.advanced_statistics import (
             MarkovChainAnalyzer, ClusterPatternAnalyzer, DynamicHotColdWeighter
         )
-        from analyzers.deep_learning_predictor import DeepLearningPredictor
         from analyzers.statistical_analyzer import StatisticalAnalyzer
         from analyzers.advanced_filters import AdvancedFilterPipeline
 
-        self._markov = MarkovChainAnalyzer(self.historical_data)
-        self._cluster = ClusterPatternAnalyzer(self.historical_data)
-        self._hotcold = DynamicHotColdWeighter(self.historical_data)
-        self._deep_learning = DeepLearningPredictor(
-            self.historical_data, epochs=self._dl_epochs)
-        self._stat_analyzer = StatisticalAnalyzer(self.historical_data)
-        self._stat_analyzer.analyze_frequency()
-        self._stat_analyzer.analyze_recent_trends()
-        self._filter_pipeline = AdvancedFilterPipeline(self.historical_data)
+        # 핵심 분석기 초기화
+        try:
+            self._markov = MarkovChainAnalyzer(self.historical_data)
+        except Exception as e:
+            _log.warning("MarkovChainAnalyzer 초기화 실패: %s", e)
+
+        try:
+            self._cluster = ClusterPatternAnalyzer(self.historical_data)
+        except Exception as e:
+            _log.warning("ClusterPatternAnalyzer 초기화 실패: %s", e)
+
+        try:
+            self._hotcold = DynamicHotColdWeighter(self.historical_data)
+        except Exception as e:
+            _log.warning("DynamicHotColdWeighter 초기화 실패: %s", e)
+
+        # 딥러닝 예측기 (numpy/sklearn 비호환 시 실패 가능 — 선택적)
+        try:
+            from analyzers.deep_learning_predictor import DeepLearningPredictor
+            self._deep_learning = DeepLearningPredictor(
+                self.historical_data, epochs=self._dl_epochs)
+        except Exception as e:
+            _log.warning("DeepLearningPredictor 초기화 실패 (선택적): %s", e)
+            self._deep_learning = None
+
+        try:
+            self._stat_analyzer = StatisticalAnalyzer(self.historical_data)
+            self._stat_analyzer.analyze_frequency()
+            self._stat_analyzer.analyze_recent_trends()
+        except Exception as e:
+            _log.warning("StatisticalAnalyzer 초기화 실패: %s", e)
+
+        try:
+            self._filter_pipeline = AdvancedFilterPipeline(self.historical_data)
+        except Exception as e:
+            _log.warning("AdvancedFilterPipeline 초기화 실패: %s", e)
 
         self._is_initialized = True
         _log.info("통합 추천 엔진 초기화 완료")
@@ -205,12 +231,13 @@ class IntegratedRecommender:
                 continue
             seen.add(key)
 
-            # 고급 필터 파이프라인 적용
-            if not self._filter_pipeline.passes(nums):
-                continue
-
-            # 종합 점수 계산
-            filter_score = self._filter_pipeline.score(nums)
+            # 고급 필터 파이프라인 적용 (없으면 필터 없이 통과)
+            if self._filter_pipeline:
+                if not self._filter_pipeline.passes(nums):
+                    continue
+                filter_score = self._filter_pipeline.score(nums)
+            else:
+                filter_score = 0.5
             ensemble_score = sum(probs[n - 1] for n in nums)
 
             # 군집 적합도
