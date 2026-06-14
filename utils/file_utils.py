@@ -16,7 +16,7 @@ ADDITIONAL_DATA_FILE_CANDIDATES = [
 ]
 
 # CSV 인코딩 시도 순서
-_CSV_ENCODINGS = ('utf-8', 'cp949', 'euc-kr')
+_CSV_ENCODINGS = ('utf-8-sig', 'utf-8', 'cp949', 'euc-kr')
 
 
 def resolve_data_file() -> str:

@@ -93,7 +93,7 @@ class DataLoadWorker(QThread):
         if not os.path.exists(filepath):
             return []
 
-        encodings = ('utf-8', 'cp949', 'euc-kr')
+        encodings = ('utf-8-sig', 'utf-8', 'cp949', 'euc-kr')
         for enc in encodings:
             try:
                 with open(filepath, 'r', encoding=enc, newline='') as f:
