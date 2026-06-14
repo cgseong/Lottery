@@ -101,7 +101,7 @@ class HistoryPage(BasePage):
 
         self._all_rows = sorted(
             self.historical_data,
-            key=lambda x: int(x.get('회차', 0)),
+            key=lambda x: int(x.get('round', 0)),
             reverse=True
         )
         self._populate_table(self._all_rows)
@@ -112,18 +112,18 @@ class HistoryPage(BasePage):
 
         for row_idx, row_data in enumerate(rows):
             # 회차
-            round_item = QTableWidgetItem(str(row_data.get('회차', '')))
+            round_item = QTableWidgetItem(str(row_data.get('round', '')))
             round_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row_idx, 0, round_item)
 
             # 날짜
-            date_item = QTableWidgetItem(row_data.get('날짜', ''))
+            date_item = QTableWidgetItem(row_data.get('date', ''))
             date_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row_idx, 1, date_item)
 
             # 번호 1~6
             for i in range(1, 7):
-                num_str = row_data.get(f'번호{i}', '')
+                num_str = row_data.get(f'num{i}', '')
                 item = QTableWidgetItem(num_str)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -139,7 +139,7 @@ class HistoryPage(BasePage):
                 self.table.setItem(row_idx, i + 1, item)
 
             # 보너스
-            bonus_str = row_data.get('보너스번호', '')
+            bonus_str = row_data.get('bonus', '')
             bonus_item = QTableWidgetItem(bonus_str)
             bonus_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             try:
@@ -158,7 +158,7 @@ class HistoryPage(BasePage):
 
         try:
             round_no = int(query)
-            filtered = [r for r in self._all_rows if int(r.get('회차', 0)) == round_no]
+            filtered = [r for r in self._all_rows if int(r.get('round', 0)) == round_no]
             if filtered:
                 self._populate_table(filtered)
                 self.info_label.setText(f"{round_no}회차 검색 결과")

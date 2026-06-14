@@ -123,7 +123,7 @@ class WeightOptimizer:
 
                 for actual_row in test_data:
                     try:
-                        actual = {int(actual_row[f'번호{j}']) for j in range(1, 7)}
+                        actual = {int(actual_row[f'num{j}']) for j in range(1, 7)}
                     except (KeyError, ValueError):
                         continue
 

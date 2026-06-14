@@ -23,10 +23,10 @@ def test_lotto_number_range():
 
 
 def test_column_names():
-    assert BONUS_COLUMN == '보너스번호'
-    assert ROUND_COLUMN == '회차'
+    assert BONUS_COLUMN == 'bonus'
+    assert ROUND_COLUMN == 'round'
     assert len(LOTTO_NUMBER_COLUMNS) == 6
-    assert LOTTO_NUMBER_COLUMNS == ['번호1', '번호2', '번호3', '번호4', '번호5', '번호6']
+    assert LOTTO_NUMBER_COLUMNS == ['num1', 'num2', 'num3', 'num4', 'num5', 'num6']
 
 
 def test_file_paths_are_strings():

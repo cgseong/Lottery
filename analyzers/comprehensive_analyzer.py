@@ -86,7 +86,7 @@ class ComprehensiveAnalyzer:
         rows: List[List[int]] = []
         for d in self.historical_data:
             try:
-                row = [int(d[f'번호{j}']) for j in range(1, 7)]
+                row = [int(d[f'num{j}']) for j in range(1, 7)]
                 if all(1 <= n <= 45 for n in row):
                     rows.append(row)
             except (KeyError, ValueError):

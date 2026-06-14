@@ -7,10 +7,10 @@ import pytest
 def _make_draw(round_num: int) -> dict:
     nums = sorted(random.sample(range(1, 46), 6))
     return {
-        '회차': round_num,
-        '번호1': nums[0], '번호2': nums[1], '번호3': nums[2],
-        '번호4': nums[3], '번호5': nums[4], '번호6': nums[5],
-        '보너스번호': random.randint(1, 45),
+        'round': round_num,
+        'num1': nums[0], 'num2': nums[1], 'num3': nums[2],
+        'num4': nums[3], 'num5': nums[4], 'num6': nums[5],
+        'bonus': random.randint(1, 45),
     }
 
 

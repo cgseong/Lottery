@@ -49,8 +49,8 @@ class TestCheckConsecutiveCount:
 
         data = [
             {
-                '회차': i, '번호1': 1, '번호2': 10, '번호3': 20,
-                '번호4': 30, '번호5': 40, '번호6': 45, '보너스번호': 5,
+                'round': i, 'num1': 1, 'num2': 10, 'num3': 20,
+                'num4': 30, 'num5': 40, 'num6': 45, 'bonus': 5,
             }
             for i in range(1, 11)
         ]
@@ -100,31 +100,31 @@ class TestExtractNumbersFromData:
 
     def test_normal_row(self):
         row = {
-            '번호1': 3, '번호2': 14, '번호3': 22,
-            '번호4': 31, '번호5': 39, '번호6': 45,
+            'num1': 3, 'num2': 14, 'num3': 22,
+            'num4': 31, 'num5': 39, 'num6': 45,
         }
         assert extract_numbers_from_data(row) == [3, 14, 22, 31, 39, 45]
 
     def test_string_values(self):
         """CSV 문자열 값도 처리할 수 있어야 한다."""
         row = {
-            '번호1': '5', '번호2': '12', '번호3': '21',
-            '번호4': '30', '번호5': '38', '번호6': '44',
+            'num1': '5', 'num2': '12', 'num3': '21',
+            'num4': '30', 'num5': '38', 'num6': '44',
         }
         result = extract_numbers_from_data(row)
         assert result == [5, 12, 21, 30, 38, 44]
 
     def test_result_is_sorted(self):
         row = {
-            '번호1': 40, '번호2': 1, '번호3': 25,
-            '번호4': 10, '번호5': 33, '번호6': 7,
+            'num1': 40, 'num2': 1, 'num3': 25,
+            'num4': 10, 'num5': 33, 'num6': 7,
         }
         result = extract_numbers_from_data(row)
         assert result == sorted(result)
 
     def test_missing_columns(self):
         """일부 컬럼이 없어도 추출 가능한 번호만 반환한다."""
-        row = {'번호1': 5, '번호2': 10}
+        row = {'num1': 5, 'num2': 10}
         result = extract_numbers_from_data(row)
         assert result == [5, 10]
 

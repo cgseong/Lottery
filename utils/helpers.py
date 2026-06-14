@@ -238,7 +238,7 @@ def extract_numbers_from_data(data: Dict) -> List[int]:
     """데이터에서 번호를 추출합니다."""
     numbers = []
     for i in range(1, 7):
-        key = f'번호{i}'
+        key = f'num{i}'
         if key in data and data[key]:
             try:
                 numbers.append(int(data[key]))

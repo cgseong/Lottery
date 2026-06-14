@@ -55,7 +55,7 @@ class MarkovChainAnalyzer:
         nums = []
         for i in range(1, 7):
             try:
-                n = int(row.get(f'번호{i}', 0))
+                n = int(row.get(f'num{i}', 0))
                 if 1 <= n <= MAX_LOTTO_NUMBER:
                     nums.append(n)
             except (ValueError, TypeError):
@@ -75,7 +75,7 @@ class MarkovChainAnalyzer:
             return
 
         rows = sorted(self.historical_data,
-                      key=lambda x: int(x.get('회차', 0) or 0))
+                      key=lambda x: int(x.get('round', 0) or 0))
         prev_nums = None
 
         for row in rows:
@@ -194,7 +194,7 @@ class ClusterPatternAnalyzer:
         nums = []
         for i in range(1, 7):
             try:
-                n = int(row.get(f'번호{i}', 0))
+                n = int(row.get(f'num{i}', 0))
                 if 1 <= n <= MAX_LOTTO_NUMBER:
                     nums.append(n)
             except (ValueError, TypeError):
@@ -359,7 +359,7 @@ class DynamicHotColdWeighter:
     def _compute(self) -> None:
         """전체 데이터를 순차 처리하여 온도·모멘텀을 계산합니다."""
         rows = sorted(self.historical_data,
-                      key=lambda x: int(x.get('회차', 0) or 0))
+                      key=lambda x: int(x.get('round', 0) or 0))
         if not rows:
             return
 
@@ -370,7 +370,7 @@ class DynamicHotColdWeighter:
         for idx, row in enumerate(rows):
             for i in range(1, 7):
                 try:
-                    n = int(row.get(f'번호{i}', 0))
+                    n = int(row.get(f'num{i}', 0))
                     if 1 <= n <= MAX_LOTTO_NUMBER:
                         appearances[n].append(idx)
                 except (ValueError, TypeError):

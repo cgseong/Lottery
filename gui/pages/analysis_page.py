@@ -184,13 +184,13 @@ class AnalysisPage(BasePage):
 
     def _run_analysis(self):
         if not self.historical_data:
-            self.latest_round_label.setText("로또당첨번호.csv 파일을 확인해주세요.")
+            self.latest_round_label.setText("lotto_results.csv 파일을 확인해주세요.")
             return
 
         # ── 최신 당첨번호 (CSV 데이터에서 직접 읽기) ──
         sorted_data = sorted(
             self.historical_data,
-            key=lambda x: int(x.get('회차', 0)),
+            key=lambda x: int(x.get('round', 0)),
             reverse=True
         )
 
@@ -207,8 +207,8 @@ class AnalysisPage(BasePage):
             return
 
         latest = sorted_data[0]
-        round_no = latest.get('회차', '?')
-        date_str = latest.get('날짜', '')
+        round_no = latest.get('round', '?')
+        date_str = latest.get('date', '')
         self.latest_round_label.setText(f"{round_no}회 ({date_str})")
 
         # 기존 공 위젯 제거 (마지막 stretch 제외)
@@ -220,7 +220,7 @@ class AnalysisPage(BasePage):
         # 번호 공 삽입
         for i in range(1, 7):
             try:
-                num = int(latest[f'번호{i}'])
+                num = int(latest[f'num{i}'])
                 ball = NumberBallWidget(num, size=48)
                 self.balls_layout.insertWidget(
                     self.balls_layout.count() - 1, ball
@@ -230,7 +230,7 @@ class AnalysisPage(BasePage):
 
         # 보너스 번호
         try:
-            bonus = int(latest.get('보너스번호', ''))
+            bonus = int(latest.get('bonus', ''))
             plus_label = QLabel("+")
             plus_label.setStyleSheet("font-size: 18px; color: #7f8c8d; padding: 0 5px;")
             self.balls_layout.insertWidget(self.balls_layout.count() - 1, plus_label)
@@ -252,7 +252,7 @@ class AnalysisPage(BasePage):
         for row in sorted_data:
             for i in range(1, 7):
                 try:
-                    all_numbers.append(int(row[f'번호{i}']))
+                    all_numbers.append(int(row[f'num{i}']))
                 except (ValueError, TypeError, KeyError):
                     pass
 

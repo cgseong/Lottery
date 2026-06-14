@@ -20,7 +20,7 @@ class Backtester:
         for idx in range(window, len(self.historical_data) - 1):
             train_data = self.historical_data[:idx]
             next_row = self.historical_data[idx]
-            actual = {int(next_row[f"번호{i}"]) for i in range(1, 7)}
+            actual = {int(next_row[f"num{i}"]) for i in range(1, 7)}
             analyzer = StatisticalAnalyzer(train_data)
 
             recs = analyzer.generate_recommendations(num_recommendations=max(1, trials))

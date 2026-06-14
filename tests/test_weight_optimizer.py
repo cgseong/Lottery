@@ -26,10 +26,10 @@ def large_data():
     for i in range(1, 201):
         nums = sorted(random.sample(range(1, 46), 6))
         rows.append({
-            '회차': i,
-            '번호1': nums[0], '번호2': nums[1], '번호3': nums[2],
-            '번호4': nums[3], '번호5': nums[4], '번호6': nums[5],
-            '보너스번호': 7,
+            'round': i,
+            'num1': nums[0], 'num2': nums[1], 'num3': nums[2],
+            'num4': nums[3], 'num5': nums[4], 'num6': nums[5],
+            'bonus': 7,
         })
     return rows
 
@@ -42,10 +42,10 @@ def small_data_10():
     for i in range(1, 11):
         nums = sorted(random.sample(range(1, 46), 6))
         rows.append({
-            '회차': i,
-            '번호1': nums[0], '번호2': nums[1], '번호3': nums[2],
-            '번호4': nums[3], '번호5': nums[4], '번호6': nums[5],
-            '보너스번호': random.randint(1, 45),
+            'round': i,
+            'num1': nums[0], 'num2': nums[1], 'num3': nums[2],
+            'num4': nums[3], 'num5': nums[4], 'num6': nums[5],
+            'bonus': random.randint(1, 45),
         })
     return rows
 
@@ -117,7 +117,7 @@ def scheduler_no_updates():
 @pytest.fixture
 def scheduler_with_updates():
     mock_collector = MagicMock()
-    mock_collector.update_latest_data.return_value = [{'회차': 1200}]
+    mock_collector.update_latest_data.return_value = [{'round': 1200}]
     return AutoUpdateScheduler(collector=mock_collector)
 
 

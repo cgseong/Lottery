@@ -194,7 +194,7 @@ class AIPage(BasePage):
 
     def _run_ai(self):
         if not self.historical_data:
-            QMessageBox.warning(self, "경고", "로또당첨번호.csv 파일을 찾을 수 없습니다.")
+            QMessageBox.warning(self, "경고", "lotto_results.csv 파일을 찾을 수 없습니다.")
             return
         if not self.stat_analyzer:
             QMessageBox.warning(
