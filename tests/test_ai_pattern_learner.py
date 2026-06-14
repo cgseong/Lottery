@@ -18,8 +18,8 @@ def trained_learner(sample_data, tmp_path, monkeypatch):
     al = AIPatternLearner()
     df = pd.DataFrame(sample_data)
     df.rename(columns={
-        '번호1': '번호1', '번호2': '번호2', '번호3': '번호3',
-        '번호4': '번호4', '번호5': '번호5', '번호6': '번호6',
+        'num1': 'num1', 'num2': 'num2', 'num3': 'num3',
+        'num4': 'num4', 'num5': 'num5', 'num6': 'num6',
     }, inplace=True)
 
     X, y, last_seen = al.prepare_dataset(df)

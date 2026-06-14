@@ -34,7 +34,7 @@ class AIPatternLearner:
         pca_components: PCA 축소 후 차원 수 (use_pca=True일 때 사용)
     """
 
-    def __init__(self, data_file: str = '로또당첨번호.csv',
+    def __init__(self, data_file: str = 'lotto_results.csv',
                  use_pca: bool = False, pca_components: int = 60):
         self.data_file = data_file
         self.model = None
@@ -66,11 +66,11 @@ class AIPatternLearner:
                 except UnicodeDecodeError:
                     df = pd.read_csv(self.data_file, encoding='euc-kr')
                     
-            # '회차' 기준으로 과거->최신 순서가 되도록 정렬 (데이터의 오름차순 보장)
-            if '회차' in df.columns:
-                df['회차'] = pd.to_numeric(df['회차'], errors='coerce')
-                df = df.dropna(subset=['회차'])
-                df = df.sort_values('회차', ascending=True).reset_index(drop=True)
+            # 'round' 기준으로 과거->최신 순서가 되도록 정렬 (데이터의 오름차순 보장)
+            if 'round' in df.columns:
+                df['round'] = pd.to_numeric(df['round'], errors='coerce')
+                df = df.dropna(subset=['round'])
+                df = df.sort_values('round', ascending=True).reset_index(drop=True)
                 
             return df
         except Exception as e:
@@ -82,7 +82,7 @@ class AIPatternLearner:
 
         파생 피처 (결측기간, 합계 평균, 홀짝 비율) 등을 추가합니다.
         """
-        cols = ['번호1', '번호2', '번호3', '번호4', '번호5', '번호6']
+        cols = ['num1', 'num2', 'num3', 'num4', 'num5', 'num6']
         data = df[cols].values
         
         X = []
@@ -241,7 +241,7 @@ class AIPatternLearner:
 
     def _get_current_features(self, df: pd.DataFrame) -> np.ndarray:
         """현재 시점을 기준으로 다음 회차 예측을 위한 실시간 피처 벡터 생성"""
-        cols = ['번호1', '번호2', '번호3', '번호4', '번호5', '번호6']
+        cols = ['num1', 'num2', 'num3', 'num4', 'num5', 'num6']
         data = df[cols].values
         
         window_data = data[-self.window_size:]

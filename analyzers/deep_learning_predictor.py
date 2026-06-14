@@ -47,7 +47,7 @@ def _prepare_sequences(historical_data: List[Dict], window_size: int = 10
         X: shape=(N, window_size, 45) 이진 시퀀스
         y: shape=(N, 45) 다음 회차 이진 벡터
     """
-    rows = sorted(historical_data, key=lambda x: int(x.get('회차', 0) or 0))
+    rows = sorted(historical_data, key=lambda x: int(x.get('round', 0) or 0))
 
     # 각 회차를 45차원 이진 벡터로 변환
     vectors = []
@@ -55,7 +55,7 @@ def _prepare_sequences(historical_data: List[Dict], window_size: int = 10
         vec = np.zeros(MAX_LOTTO_NUMBER, dtype=np.float32)
         for i in range(1, 7):
             try:
-                n = int(row.get(f'번호{i}', 0))
+                n = int(row.get(f'num{i}', 0))
                 if 1 <= n <= MAX_LOTTO_NUMBER:
                     vec[n - 1] = 1.0
             except (ValueError, TypeError):

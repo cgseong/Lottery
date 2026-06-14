@@ -23,7 +23,7 @@ except ImportError as e:
 
 class LottoSystem:
     def __init__(self):
-        self.data_file = '로또당첨번호.csv'
+        self.data_file = 'lotto_results.csv'
         self.collector = LottoDataCollector()
         self.storage = NumberStorage()
         self.exclude_manager = ExcludeNumberManager()
@@ -131,15 +131,15 @@ class LottoSystem:
         latest = rows[0]
         prev   = rows[1] if len(rows) > 1 else None
 
-        round_no  = latest.get('회차', '?')
-        date_str  = latest.get('날짜', '')
-        bonus_raw = latest.get('보너스번호', '')
+        round_no  = latest.get('round', '?')
+        date_str  = latest.get('date', '')
+        bonus_raw = latest.get('bonus', '')
 
         # 번호 파싱
         nums = []
         for i in range(1, 7):
             try:
-                nums.append(int(latest[f'번호{i}']))
+                nums.append(int(latest[f'num{i}']))
             except (ValueError, TypeError):
                 pass
         nums.sort()
@@ -179,7 +179,7 @@ class LottoSystem:
         if all_data and max_sum > min_sum:
             lower = sum(
                 1 for row in all_data
-                if sum(int(row.get(f'번호{i}', 0)) for i in range(1, 7)) < total_sum
+                if sum(int(row.get(f'num{i}', 0)) for i in range(1, 7)) < total_sum
             )
             percentile = lower / len(all_data) * 100
         else:
@@ -198,7 +198,7 @@ class LottoSystem:
             prev_set = set()
             for i in range(1, 7):
                 try:
-                    prev_set.add(int(prev[f'번호{i}']))
+                    prev_set.add(int(prev[f'num{i}']))
                 except (ValueError, TypeError):
                     pass
             overlap_nums = [n for n in nums if n in prev_set]
@@ -270,7 +270,7 @@ class LottoSystem:
 
         # 직전 회차 대비
         if prev:
-            prev_no = prev.get('회차', '?')
+            prev_no = prev.get('round', '?')
             if overlap_nums:
                 ov_balls = '  '.join(self._ball(n) for n in sorted(overlap_nums))
                 print(f"║  직전 대비  {prev_no}회와 {bold}{len(overlap_nums)}{reset}개 일치: {ov_balls}")
@@ -716,11 +716,11 @@ class LottoSystem:
 
         for rank, row in enumerate(rows):   # rows[0] = 최신 회차
             w = 1.0 / (rank + 1)           # 최신일수록 가중치 ↑
-            round_no = row.get('회차', '?')
+            round_no = row.get('round', '?')
             nums = []
             for i in range(1, 7):
                 try:
-                    nums.append(int(row[f'번호{i}']))
+                    nums.append(int(row[f'num{i}']))
                 except (ValueError, TypeError):
                     pass
 
@@ -1046,7 +1046,7 @@ class LottoSystem:
             nums = []
             for i in range(1, 7):
                 try:
-                    nums.append(int(row[f'번호{i}']))
+                    nums.append(int(row[f'num{i}']))
                 except (ValueError, TypeError):
                     pass
             nums.sort()
@@ -1058,7 +1058,7 @@ class LottoSystem:
             if rank + 1 < len(rows):
                 for i in range(1, 7):
                     try:
-                        prev_set.add(int(rows[rank + 1][f'번호{i}']))
+                        prev_set.add(int(rows[rank + 1][f'num{i}']))
                     except (ValueError, TypeError):
                         pass
 
@@ -1380,7 +1380,7 @@ class LottoSystem:
                 with open(path, 'r', encoding=enc) as f:
                     rows = list(_csv.DictReader(f))
                 if rows:
-                    rows.sort(key=lambda r: int(r.get('회차', 0)), reverse=True)
+                    rows.sort(key=lambda r: int(r.get('round', 0)), reverse=True)
                     return rows
             except Exception:
                 continue
@@ -1388,16 +1388,16 @@ class LottoSystem:
 
     def _print_round_row(self, row: dict):
         """회차 1개를 이미지와 유사한 형식으로 출력합니다."""
-        round_no  = row.get('회차', '?')
-        date_str  = row.get('날짜', '')
-        bonus     = row.get('보너스번호', '')
-        winners   = row.get('1등당첨자수', '')
-        prize_raw = row.get('1등당첨금액', '')
+        round_no  = row.get('round', '?')
+        date_str  = row.get('date', '')
+        bonus     = row.get('bonus', '')
+        winners   = row.get('winners', '')
+        prize_raw = row.get('prize', '')
 
         # 번호 6개
         balls = []
         for i in range(1, 7):
-            val = row.get(f'번호{i}', '')
+            val = row.get(f'num{i}', '')
             try:
                 balls.append(self._ball(int(val)))
             except (ValueError, TypeError):
@@ -1436,8 +1436,8 @@ class LottoSystem:
             return
 
         total     = len(rows)
-        max_round = int(rows[0].get('회차', 0))
-        min_round = int(rows[-1].get('회차', 0))
+        max_round = int(rows[0].get('round', 0))
+        min_round = int(rows[-1].get('round', 0))
 
         print(f"\n 전체 {total}회차 데이터 패턴 분석 중... "
               f"({min_round}회 ~ {max_round}회)")
@@ -1447,16 +1447,16 @@ class LottoSystem:
         latest = rows[0]
         for i in range(1, 7):
             try:
-                prev_nums.add(int(latest[f'번호{i}']))
+                prev_nums.add(int(latest[f'num{i}']))
             except (ValueError, TypeError):
                 pass
 
-        prev_date = latest.get('날짜', '')
+        prev_date = latest.get('date', '')
         date_str  = f"  {prev_date}" if prev_date else ''
         balls_str = "  ".join(self._ball(n) for n in sorted(prev_nums))
         try:
             bonus_ball = "  \033[90m+\033[0m  " + self._ball(
-                int(latest.get('보너스번호', '')), is_bonus=True)
+                int(latest.get('bonus', '')), is_bonus=True)
         except (ValueError, TypeError):
             bonus_ball = ''
         print(f" 직전 당첨번호 ({max_round}회{date_str}): {balls_str}{bonus_ball}")
@@ -1492,8 +1492,8 @@ class LottoSystem:
             return
 
         total = len(rows)
-        max_round = int(rows[0].get('회차', 0))
-        min_round = int(rows[-1].get('회차', 0))
+        max_round = int(rows[0].get('round', 0))
+        min_round = int(rows[-1].get('round', 0))
 
         reset = '\033[0m'
         bold = '\033[1m'

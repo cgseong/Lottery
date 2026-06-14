@@ -23,8 +23,8 @@ class TestPatternMatchingAnalyzerInit:
         """CSV에서 로드한 문자열 값도 올바르게 분석해야 한다."""
         str_data = [
             {
-                '회차': str(i), '번호1': '3', '번호2': '14', '번호3': '22',
-                '번호4': '31', '번호5': '39', '번호6': '45', '보너스번호': '7',
+                'round': str(i), 'num1': '3', 'num2': '14', 'num3': '22',
+                'num4': '31', 'num5': '39', 'num6': '45', 'bonus': '7',
             }
             for i in range(1, 11)
         ]

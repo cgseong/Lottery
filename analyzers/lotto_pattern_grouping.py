@@ -49,8 +49,8 @@ class LottoPatternGrouping:
             group_data = self.historical_data[i:i+group_size]
             if len(group_data) >= 3:  # 최소 3회차 이상
                 try:
-                    start_round = group_data[0].get('회차', '알 수 없음')
-                    end_round = group_data[-1].get('회차', '알 수 없음')
+                    start_round = group_data[0].get('round', '알 수 없음')
+                    end_round = group_data[-1].get('round', '알 수 없음')
                     
                     groups.append({
                         'start_round': start_round,
@@ -220,7 +220,7 @@ class LottoPatternGrouping:
                 if i + 1 < len(self.grouped_patterns):
                     next_nums: set = set()
                     for _row in self.grouped_patterns[i + 1]['data']:
-                        for _col in [f'번호{_j}' for _j in range(1, 7)]:
+                        for _col in [f'num{_j}' for _j in range(1, 7)]:
                             if _col in _row and _row[_col]:
                                 try:
                                     next_nums.add(int(_row[_col]))

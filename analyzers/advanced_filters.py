@@ -53,7 +53,7 @@ class HistoricalPatternFilter:
         nums = []
         for i in range(1, 7):
             try:
-                n = int(row.get(f'번호{i}', 0))
+                n = int(row.get(f'num{i}', 0))
                 if 1 <= n <= MAX_LOTTO_NUMBER:
                     nums.append(n)
             except (ValueError, TypeError):
@@ -67,7 +67,7 @@ class HistoricalPatternFilter:
         consec_counts = []
 
         rows = sorted(self.historical_data,
-                      key=lambda x: int(x.get('회차', 0) or 0))
+                      key=lambda x: int(x.get('round', 0) or 0))
 
         for row in rows:
             nums = self._extract_numbers(row)
@@ -222,7 +222,7 @@ class SumDistributionFilter:
             valid = True
             for i in range(1, 7):
                 try:
-                    n = int(row.get(f'번호{i}', 0))
+                    n = int(row.get(f'num{i}', 0))
                     if 1 <= n <= MAX_LOTTO_NUMBER:
                         total += n
                     else:
@@ -305,7 +305,7 @@ class AssociationRuleFilter:
             nums = []
             for i in range(1, 7):
                 try:
-                    n = int(row.get(f'번호{i}', 0))
+                    n = int(row.get(f'num{i}', 0))
                     if 1 <= n <= MAX_LOTTO_NUMBER:
                         nums.append(n)
                 except (ValueError, TypeError):
@@ -420,7 +420,7 @@ class EntropyFilter:
             nums = []
             for i in range(1, 7):
                 try:
-                    n = int(row.get(f'번호{i}', 0))
+                    n = int(row.get(f'num{i}', 0))
                     if 1 <= n <= MAX_LOTTO_NUMBER:
                         nums.append(n)
                 except (ValueError, TypeError):

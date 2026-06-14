@@ -18,10 +18,10 @@ class TestLoadCsvData:
     def test_valid_utf8_csv(self):
         """올바른 UTF-8 CSV → 데이터 반환"""
         rows = [
-            {'회차': '1', '번호1': '3', '번호2': '14', '번호3': '22',
-             '번호4': '31', '번호5': '39', '번호6': '45', '보너스번호': '7'},
-            {'회차': '2', '번호1': '5', '번호2': '11', '번호3': '20',
-             '번호4': '28', '번호5': '35', '번호6': '42', '보너스번호': '2'},
+            {'round': '1', 'num1': '3', 'num2': '14', 'num3': '22',
+             'num4': '31', 'num5': '39', 'num6': '45', 'bonus': '7'},
+            {'round': '2', 'num1': '5', 'num2': '11', 'num3': '20',
+             'num4': '28', 'num5': '35', 'num6': '42', 'bonus': '2'},
         ]
         with tempfile.NamedTemporaryFile(
             mode='w', suffix='.csv', encoding='utf-8', delete=False, newline=''
@@ -34,13 +34,13 @@ class TestLoadCsvData:
         try:
             result = load_csv_data(tmp_path)
             assert len(result) == 2
-            assert result[0]['번호1'] == '3'
-            assert result[1]['회차'] == '2'
+            assert result[0]['num1'] == '3'
+            assert result[1]['round'] == '2'
         finally:
             os.unlink(tmp_path)
 
-    def test_missing_번호1_column_returns_empty(self):
-        """'번호1' 컬럼이 없는 CSV → 빈 리스트 반환"""
+    def test_missing_num1_column_returns_empty(self):
+        """'num1' 컬럼이 없는 CSV → 빈 리스트 반환"""
         with tempfile.NamedTemporaryFile(
             mode='w', suffix='.csv', encoding='utf-8', delete=False, newline=''
         ) as f:
@@ -60,7 +60,7 @@ class TestLoadCsvData:
         with tempfile.NamedTemporaryFile(
             mode='w', suffix='.csv', encoding='utf-8', delete=False, newline=''
         ) as f:
-            writer = csv.DictWriter(f, fieldnames=['번호1', '번호2'])
+            writer = csv.DictWriter(f, fieldnames=['num1', 'num2'])
             writer.writeheader()
             tmp_path = f.name
 
@@ -83,12 +83,12 @@ class TestResolveDataFile:
         """당첨번호 CSV가 없으면 기본 파일명 반환"""
         monkeypatch.chdir(tmp_path)
         result = resolve_data_file()
-        assert result == '로또당첨번호.csv'
+        assert result == 'lotto_results.csv'
 
     def test_finds_existing_file(self, tmp_path, monkeypatch):
-        """'로또당첨번호.csv'가 존재하면 그것을 반환"""
+        """'lotto_results.csv'가 존재하면 그것을 반환"""
         monkeypatch.chdir(tmp_path)
-        target = tmp_path / '로또당첨번호.csv'
+        target = tmp_path / 'lotto_results.csv'
         target.write_text('test')
         result = resolve_data_file()
-        assert result == '로또당첨번호.csv'
+        assert result == 'lotto_results.csv'

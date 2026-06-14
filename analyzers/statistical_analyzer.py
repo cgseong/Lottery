@@ -663,7 +663,7 @@ class StatisticalAnalyzer:
         key_map = {k.replace(' ', ''): k for k in data.keys()}
         for i in range(1, 7):
             candidates = [
-                f'번호{i}', f'번호 {i}', f'num{i}', f'num{i}'.upper(), f'No{i}', f'No {i}'
+                f'num{i}', f'num{i}'.upper(), f'번호{i}', f'번호 {i}', f'No{i}', f'No {i}'
             ]
             key = None
             for cand in candidates:
@@ -683,7 +683,7 @@ class StatisticalAnalyzer:
     def _get_round_value(self, data: Dict) -> int:
         """Return round number for sorting; fallback to 0 if missing."""
         key_map = {k.replace(' ', ''): k for k in data.keys()}
-        candidates = ['회차', '회 차', 'round', 'Round']
+        candidates = ['round', 'Round', '회차', '회 차']
         key = None
         for cand in candidates:
             if cand in data:

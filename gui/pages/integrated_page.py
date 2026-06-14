@@ -144,7 +144,7 @@ class IntegratedPage(BasePage):
         if not self.historical_data:
             QMessageBox.warning(
                 self, "경고",
-                "로또당첨번호.csv 파일을 찾을 수 없습니다.\n"
+                "lotto_results.csv 파일을 찾을 수 없습니다.\n"
                 "프로그램과 같은 폴더에 파일이 있는지 확인해주세요."
             )
             return

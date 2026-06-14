@@ -20,9 +20,12 @@ from gui.pages.comprehensive_page import ComprehensivePage
 from gui.pages.integrated_page import IntegratedPage
 from gui.pages.history_page import HistoryPage
 
+# CSV 파일명 상수
+_CSV_FILENAME = 'lotto_results.csv'
+
 
 class DataLoadWorker(QThread):
-    """로또당첨번호.csv를 로드하고 분석기를 초기화하는 백그라운드 워커
+    """lotto_results.csv를 로드하고 분석기를 초기화하는 백그라운드 워커
 
     2단계로 동작합니다:
       1단계: CSV 로드 + 분석기 초기화 → data_ready 시그널 발생 (UI 즉시 업데이트)
@@ -43,12 +46,12 @@ class DataLoadWorker(QThread):
             sys.path.insert(0, project_root)
 
         # ── 1단계: CSV 로드 ──
-        self.progress.emit("로또당첨번호.csv 로딩 중...")
+        self.progress.emit("lotto_results.csv 로딩 중...")
         data = self._load_csv(self.csv_path)
 
         if not data:
             self.progress.emit(
-                f"⚠️ 로또당첨번호.csv 로드 실패 (경로: {self.csv_path}, "
+                f"⚠️ lotto_results.csv 로드 실패 (경로: {self.csv_path}, "
                 f"존재: {os.path.exists(self.csv_path)})"
             )
             self.data_ready.emit(None, None, None)
@@ -87,7 +90,7 @@ class DataLoadWorker(QThread):
             self.finished.emit(None)
 
     def _load_csv(self, filepath: str) -> list:
-        """로또당첨번호.csv를 인코딩 자동 감지로 읽어 dict 리스트로 반환합니다."""
+        """lotto_results.csv를 인코딩 자동 감지로 읽어 dict 리스트로 반환합니다."""
         import csv as _csv
 
         if not os.path.exists(filepath):
@@ -99,7 +102,7 @@ class DataLoadWorker(QThread):
                 with open(filepath, 'r', encoding=enc, newline='') as f:
                     reader = _csv.DictReader(f)
                     data = list(reader)
-                    if data and any('번호1' in str(k) for k in data[0].keys()):
+                    if data and any('num1' in str(k) for k in data[0].keys()):
                         return data
             except (UnicodeDecodeError, Exception):
                 continue
@@ -272,13 +275,13 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.data_status_label)
 
     def _load_data(self):
-        """백그라운드에서 로또당첨번호.csv 로드 (2단계: 즉시 표시 → 최적화)"""
-        # 여러 경로에서 로또당첨번호.csv 탐색
+        """백그라운드에서 lotto_results.csv 로드 (2단계: 즉시 표시 → 최적화)"""
+        # 여러 경로에서 lotto_results.csv 탐색
         csv_path = self._find_csv_file()
 
         if not csv_path:
-            self.status_label.setText("⚠️ 로또당첨번호.csv 파일을 찾을 수 없습니다")
-            self.data_status_label.setText("프로그램과 같은 폴더에 로또당첨번호.csv가 필요합니다")
+            self.status_label.setText("⚠️ lotto_results.csv 파일을 찾을 수 없습니다")
+            self.data_status_label.setText("프로그램과 같은 폴더에 lotto_results.csv가 필요합니다")
             return
 
         self.worker = DataLoadWorker(csv_path)
@@ -288,16 +291,16 @@ class MainWindow(QMainWindow):
         self.worker.start()
 
     def _find_csv_file(self) -> str:
-        """로또당첨번호.csv 파일을 여러 경로에서 탐색합니다."""
+        """lotto_results.csv 파일을 여러 경로에서 탐색합니다."""
         candidates = [
             # 1. 현재 작업 디렉터리
-            os.path.join(os.getcwd(), '로또당첨번호.csv'),
+            os.path.join(os.getcwd(), _CSV_FILENAME),
             # 2. app_desktop.py가 있는 디렉터리 (프로젝트 루트)
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '로또당첨번호.csv'),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), _CSV_FILENAME),
             # 3. main_window.py 기준 상위 디렉터리
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '로또당첨번호.csv'),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', _CSV_FILENAME),
             # 4. sys.argv[0] (실행 스크립트) 기준
-            os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), '로또당첨번호.csv') if sys.argv else '',
+            os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), _CSV_FILENAME) if sys.argv else '',
         ]
         for path in candidates:
             if path and os.path.exists(path):
@@ -314,15 +317,15 @@ class MainWindow(QMainWindow):
         self.comp_analyzer = comp_analyzer
 
         if data:
-            self.data_status_label.setText(f"📊 로또당첨번호.csv — {len(data)}회차 로드됨")
+            self.data_status_label.setText(f"📊 lotto_results.csv — {len(data)}회차 로드됨")
 
             # 각 페이지에 데이터 전달 → 분석 결과 즉시 표시
             for page in self.pages.values():
                 page.set_data(data, stat_analyzer, comp_analyzer, None)
         else:
-            self.status_label.setText("⚠️ 로또당첨번호.csv 로드 실패")
+            self.status_label.setText("⚠️ lotto_results.csv 로드 실패")
             self.data_status_label.setText(
-                "로또당첨번호.csv 파일이 프로그램과 같은 폴더에 있는지 확인해주세요"
+                "lotto_results.csv 파일이 프로그램과 같은 폴더에 있는지 확인해주세요"
             )
 
     def _on_optimize_finished(self, weights):

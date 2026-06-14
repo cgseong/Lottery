@@ -418,17 +418,17 @@ class LottoDataCollector:
                 return None
 
             record = {
-                '회차': int(payload.get('drwNo', round_num)),
-                '날짜': payload.get('drwNoDate', ''),
-                '번호1': numbers[0],
-                '번호2': numbers[1],
-                '번호3': numbers[2],
-                '번호4': numbers[3],
-                '번호5': numbers[4],
-                '번호6': numbers[5],
-                '보너스번호': bonus,
-                '1등당첨자수': int(payload.get('firstPrzwnerCo', 0)),
-                '1등당첨금액': int(payload.get('firstWinamnt', 0)),
+                'round': int(payload.get('drwNo', round_num)),
+                'date': payload.get('drwNoDate', ''),
+                'num1': numbers[0],
+                'num2': numbers[1],
+                'num3': numbers[2],
+                'num4': numbers[3],
+                'num5': numbers[4],
+                'num6': numbers[5],
+                'bonus': bonus,
+                'winners': int(payload.get('firstPrzwnerCo', 0)),
+                'prize': int(payload.get('firstWinamnt', 0)),
             }
             return record
         except (TypeError, ValueError, KeyError) as e:
@@ -439,21 +439,21 @@ class LottoDataCollector:
     def _build_record(round_num, numbers, bonus_number):
         """번호 리스트로부터 표준 레코드 딕셔너리를 생성합니다."""
         return {
-            '회차': round_num,
-            '번호1': numbers[0],
-            '번호2': numbers[1],
-            '번호3': numbers[2],
-            '번호4': numbers[3],
-            '번호5': numbers[4],
-            '번호6': numbers[5],
-            '보너스번호': bonus_number,
+            'round': round_num,
+            'num1': numbers[0],
+            'num2': numbers[1],
+            'num3': numbers[2],
+            'num4': numbers[3],
+            'num5': numbers[4],
+            'num6': numbers[5],
+            'bonus': bonus_number,
         }
 
     # ------------------------------------------------------------------
     # CSV 저장
     # ------------------------------------------------------------------
 
-    def save_to_csv(self, data, filename='로또당첨번호.csv'):
+    def save_to_csv(self, data, filename='lotto_results.csv'):
         """수집된 데이터를 CSV 파일로 저장합니다.
 
         Returns:
@@ -475,7 +475,7 @@ class LottoDataCollector:
                             temp_data = list(reader)
                             if temp_data:
                                 keys = list(temp_data[0].keys())
-                                if any('회차' in str(k) for k in keys):
+                                if any('num1' in str(k) or 'round' in str(k) for k in keys):
                                     existing_data = temp_data
                                     break
                     except (UnicodeDecodeError, csv.Error):
@@ -490,13 +490,13 @@ class LottoDataCollector:
 
             for row in existing_data:
                 try:
-                    if '회차' in row:
-                        existing_rounds.add(int(row['회차']))
+                    if 'round' in row:
+                        existing_rounds.add(int(row['round']))
                         valid_existing_data.append(row)
                 except (ValueError, KeyError):
                     continue
 
-            new_data = [row for row in data if int(row['회차']) not in existing_rounds]
+            new_data = [row for row in data if int(row['round']) not in existing_rounds]
 
             if not new_data:
                 print(" 모든 데이터가 이미 존재합니다.")
@@ -506,10 +506,10 @@ class LottoDataCollector:
             all_data = valid_existing_data + new_data
 
             # 회차 순으로 정렬
-            all_data.sort(key=lambda x: int(x['회차']))
+            all_data.sort(key=lambda x: int(x['round']))
 
             # CSV 파일로 저장 — 새 데이터에 확장 컬럼이 있으면 포함
-            base_fields = ['회차', '날짜', '번호1', '번호2', '번호3', '번호4', '번호5', '번호6', '보너스번호', '1등당첨자수', '1등당첨금액']
+            base_fields = ['round', 'date', 'num1', 'num2', 'num3', 'num4', 'num5', 'num6', 'bonus', 'winners', 'prize']
             # 기존 데이터에 없는 컬럼은 빈 값으로 채움
             for row in all_data:
                 for field in base_fields:
@@ -550,16 +550,16 @@ class LottoDataCollector:
 
         # 기존 데이터 확인
         existing_rounds = set()
-        if os.path.exists('로또당첨번호.csv'):
+        if os.path.exists('lotto_results.csv'):
             encodings = ['utf-8', 'cp949', 'euc-kr']
             for enc in encodings:
                 try:
-                    with open('로또당첨번호.csv', 'r', encoding=enc) as file:
+                    with open('lotto_results.csv', 'r', encoding=enc) as file:
                         reader = csv.DictReader(file)
                         for row in reader:
-                            if '회차' in row:
+                            if 'round' in row:
                                 try:
-                                    existing_rounds.add(int(row['회차']))
+                                    existing_rounds.add(int(row['round']))
                                 except ValueError:
                                     continue
 

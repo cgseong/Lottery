@@ -114,7 +114,7 @@ class RollingBacktester:
             predictions_per_round: 각 시점에서 생성할 예측 조합 수
         """
         self.historical_data = sorted(
-            historical_data, key=lambda x: int(x.get('회차', 0) or 0))
+            historical_data, key=lambda x: int(x.get('round', 0) or 0))
         self.train_window = train_window
         self.step = step
         self.predictions_per_round = predictions_per_round
@@ -123,7 +123,7 @@ class RollingBacktester:
         nums = set()
         for i in range(1, 7):
             try:
-                n = int(row.get(f'번호{i}', 0))
+                n = int(row.get(f'num{i}', 0))
                 if 1 <= n <= MAX_LOTTO_NUMBER:
                     nums.add(n)
             except (ValueError, TypeError):
@@ -184,7 +184,7 @@ class RollingBacktester:
             result.total_rounds += 1
             result.details.append({
                 'round_idx': idx,
-                'round_no': actual_row.get('회차', '?'),
+                'round_no': actual_row.get('round', '?'),
                 'actual': sorted(actual),
                 'best_hit': best_hit,
             })
@@ -418,7 +418,7 @@ class StrategyFactory:
         current_nums = []
         for i in range(1, 7):
             try:
-                n = int(last_row.get(f'번호{i}', 0))
+                n = int(last_row.get(f'num{i}', 0))
                 if 1 <= n <= MAX_LOTTO_NUMBER:
                     current_nums.append(n)
             except (ValueError, TypeError):
@@ -495,7 +495,7 @@ class StrategyFactory:
         current_nums = []
         for i in range(1, 7):
             try:
-                n = int(last_row.get(f'번호{i}', 0))
+                n = int(last_row.get(f'num{i}', 0))
                 if 1 <= n <= MAX_LOTTO_NUMBER:
                     current_nums.append(n)
             except (ValueError, TypeError):

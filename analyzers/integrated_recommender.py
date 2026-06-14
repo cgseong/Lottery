@@ -85,13 +85,13 @@ class IntegratedRecommender:
     def _get_latest_numbers(self) -> List[int]:
         """최근 회차 당첨번호를 반환합니다."""
         rows = sorted(self.historical_data,
-                      key=lambda x: int(x.get('회차', 0) or 0), reverse=True)
+                      key=lambda x: int(x.get('round', 0) or 0), reverse=True)
         if not rows:
             return []
         nums = []
         for i in range(1, 7):
             try:
-                n = int(rows[0].get(f'번호{i}', 0))
+                n = int(rows[0].get(f'num{i}', 0))
                 if 1 <= n <= MAX_LOTTO_NUMBER:
                     nums.append(n)
             except (ValueError, TypeError):

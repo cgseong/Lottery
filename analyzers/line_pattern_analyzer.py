@@ -124,8 +124,8 @@ class LinePatternAnalyzer:
         
         for i, round_data in enumerate(recent_data):
             try:
-                # ROUND_COLUMN 상수 대신 직접 '회차' 사용
-                round_num = round_data.get('회차', 0)
+                # ROUND_COLUMN 상수 대신 직접 'round' 사용
+                round_num = round_data.get('round', 0)
                 numbers = self._get_main_numbers_from_row(round_data)
                 
                 _log.debug("회차 %s: %s", round_num, numbers)
@@ -155,7 +155,7 @@ class LinePatternAnalyzer:
         numbers = []
         # 직접 컬럼명 사용
         for i in range(1, 7):
-            col_name = f'번호{i}'
+            col_name = f'num{i}'
             if col_name in row_dict and row_dict[col_name]:
                 try:
                     numbers.append(int(row_dict[col_name]))

@@ -10,13 +10,13 @@ DEFAULT_RECENT_COUNT = 10
 # 전체 번호 목록 (불변 tuple — range(1, 46) 직접 작성 반복 방지)
 ALL_NUMBERS: tuple = tuple(range(1, MAX_LOTTO_NUMBER + 1))
 
-# 로또 번호 컬럼명
-LOTTO_NUMBER_COLUMNS = [f'번호{i}' for i in range(1, 7)]
-BONUS_COLUMN = '보너스번호'
-ROUND_COLUMN = '회차'
+# 로또 번호 컬럼명 (영문)
+LOTTO_NUMBER_COLUMNS = [f'num{i}' for i in range(1, 7)]
+BONUS_COLUMN = 'bonus'
+ROUND_COLUMN = 'round'
 
 # 파일 경로
-DEFAULT_CSV_FILE = '로또당첨번호.csv'
+DEFAULT_CSV_FILE = 'lotto_results.csv'
 DEFAULT_EXCLUDE_FILE = 'exclude_numbers.json'
 DEFAULT_SAVED_FILE = 'saved_numbers.json'
 DEFAULT_AI_MODELS_PATH = 'ai_models.pkl'
