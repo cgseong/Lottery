@@ -15,18 +15,25 @@ class RecommendWorker(QThread):
     """추천 번호 생성을 백그라운드에서 수행"""
     finished = Signal(list)
 
-    def __init__(self, stat_analyzer, count):
+    def __init__(self, count, mode="diversity"):
         super().__init__()
-        self.stat_analyzer = stat_analyzer
         self.count = count
+        self.mode = mode
 
     def run(self):
         try:
-            results = self.stat_analyzer.generate_recommendations(
-                num_recommendations=self.count
+            from analyzers.random_recommend_engine import (
+                generate_diverse_recommendations,
+                generate_coverage_sets,
             )
+            if self.mode == "coverage":
+                results = generate_coverage_sets(num_sets=self.count)
+            else:
+                results = generate_diverse_recommendations(
+                    num_recommendations=self.count, max_overlap=2
+                )
             self.finished.emit(results or [])
-        except Exception as e:
+        except Exception:
             self.finished.emit([])
 
 
@@ -119,20 +126,11 @@ class RecommendPage(BasePage):
         """
 
     def _generate_recommendations(self):
-        if not self.stat_analyzer:
-            QMessageBox.warning(
-                self, "경고",
-                "분석기가 초기화되지 않았습니다.\n\n"
-                "터미널에서 아래 명령어를 실행해주세요:\n"
-                "pip install --upgrade matplotlib numpy"
-            )
-            return
-
         self.recommend_btn.setEnabled(False)
         self.recommend_btn.setText("생성 중...")
 
         count = self.count_spin.value()
-        self.worker = RecommendWorker(self.stat_analyzer, count)
+        self.worker = RecommendWorker(count, mode="diversity")
         self.worker.finished.connect(self._on_results)
         self.worker.start()
 
@@ -170,7 +168,7 @@ class RecommendPage(BasePage):
         # 헤더
         header = QHBoxLayout()
         header.addWidget(QLabel(f"<b>조합 #{index}</b>"))
-        score_label = QLabel(f"점수: {rec.get('score', 0):.4f}")
+        score_label = QLabel(f"다양성: {rec.get('diversity_score', rec.get('coverage', 0)):.2f}")
         score_label.setStyleSheet("color: #27ae60; font-weight: bold;")
         header.addStretch()
         header.addWidget(score_label)
