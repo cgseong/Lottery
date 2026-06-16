@@ -357,32 +357,82 @@ class LottoSystem:
                 print("    저장되었습니다.")
 
     def recommend_numbers(self):
-        """2. 번호 추천"""
-        if not self.stat_analyzer:
-            print("\n[WARN] 데이터가 없습니다.")
-            return
-        print("\n 통계 기반 번호 추천")
-        recommendations = self.stat_analyzer.generate_recommendations(num_recommendations=1)
-        if not recommendations:
-            print("\n[WARN] 추천 번호를 생성할 수 없습니다.")
-            return
-        rec = recommendations[0]
-        print(f"\n 추천번호: {rec['numbers']}  (점수: {rec['score']:.4f})")
-        save = input("   이 조합을 저장하시겠습니까? (y/n): ").lower()
+        """2. 번호 추천 (랜덤 기반 + 다양성 확보)"""
+        from analyzers.random_recommend_engine import generate_diverse_recommendations, generate_coverage_sets
+
+        print("\n" + "=" * 60)
+        print(" 🎲 랜덤 기반 번호 추천 (다양성 극대화)")
+        print("=" * 60)
+        print("  • 순수 무작위 생성 + 극단 패턴 제거")
+        print("  • 조합 간 번호 겹침 최소화로 커버리지 극대화")
+        print("")
+
+        try:
+            count = int(input(" 추천받을 조합 개수 (1~20, 기본 5): ").strip() or "5")
+            count = max(1, min(20, count))
+        except ValueError:
+            count = 5
+
+        print(f"\n 모드를 선택하세요:")
+        print(f"  1. 다양성 추천 — 조합 간 겹침 최소화 (기본)")
+        print(f"  2. 커버리지 추천 — 1~45 번호를 최대한 넓게 커버")
+        mode = input(" 선택 (1/2, 기본 1): ").strip() or "1"
+
+        if mode == "2":
+            results = generate_coverage_sets(num_sets=count)
+            if not results:
+                print("\n[WARN] 추천 번호를 생성할 수 없습니다.")
+                return
+
+            total_coverage = results[-1]['coverage'] if results else 0
+            total_nums = len(set(n for r in results for n in r['numbers']))
+            print(f"\n{'─' * 60}")
+            print(f" 📊 커버리지 추천 결과 ({count}조합 × 6번호 = {total_nums}/45 커버)")
+            print(f"{'─' * 60}")
+
+            for i, rec in enumerate(results, 1):
+                nums_str = "  ".join(f"{n:2d}" for n in rec['numbers'])
+                print(f"  [{i}] {nums_str}  (새 번호 +{rec['new_numbers']}개, 누적 커버 {rec['coverage']*100:.0f}%)")
+
+            print(f"\n  총 커버리지: 45개 중 {total_nums}개 = {total_coverage*100:.1f}%")
+        else:
+            results = generate_diverse_recommendations(num_recommendations=count, max_overlap=2)
+            if not results:
+                print("\n[WARN] 추천 번호를 생성할 수 없습니다.")
+                return
+
+            avg_diversity = sum(r['diversity_score'] for r in results) / len(results)
+            print(f"\n{'─' * 60}")
+            print(f" 🎯 다양성 추천 결과 (평균 다양성: {avg_diversity:.2f})")
+            print(f"{'─' * 60}")
+
+            for i, rec in enumerate(results, 1):
+                nums_str = "  ".join(f"{n:2d}" for n in rec['numbers'])
+                print(f"  [{i}] {nums_str}  (다양성: {rec['diversity_score']:.2f})")
+
+        # 저장 옵션
+        print(f"\n{'─' * 60}")
+        save = input(" 모든 조합을 저장하시겠습니까? (y/n): ").lower()
         if save == 'y':
-            self.storage.save_combination(rec['numbers'], "통계 추천")
-            print("    저장되었습니다.")
+            for i, rec in enumerate(results, 1):
+                method = "커버리지 추천" if mode == "2" else "다양성 추천"
+                self.storage.save_combination(rec['numbers'], method)
+            print(f"    {len(results)}개 조합이 저장되었습니다.")
 
     def recommend_with_exclusion(self):
-        """3. 고급 추천 (고정번호)"""
-        if not self.stat_analyzer:
-            print("\n[WARN] 데이터가 없습니다.")
-            return
-        print("\n 고급 번호 추천 (고정수 설정)")
+        """3. 고급 추천 (고정번호/제외번호)"""
+        from analyzers.random_recommend_engine import generate_diverse_recommendations
+
+        print("\n" + "=" * 60)
+        print(" 🔧 고급 번호 추천 (고정수/제외수 설정)")
+        print("=" * 60)
 
         fixed_nums = set()
-        print(f"\n 고정번호 설정")
-        if input("   고정수(반드시 포함할 번호)를 설정하시겠습니까? (y/n): ").lower() == 'y':
+        exclude_nums = set()
+
+        # 고정번호 설정
+        print(f"\n 고정번호 설정 (반드시 포함할 번호)")
+        if input("   고정수를 설정하시겠습니까? (y/n): ").lower() == 'y':
             while True:
                 user_input = input("   고정할 번호 입력 (쉼표 구분, Enter로 건너뜀): ").strip()
                 if not user_input:
@@ -391,36 +441,70 @@ class LottoSystem:
                     input_list = [int(n.strip()) for n in user_input.split(',')]
                     valid_list = [n for n in input_list if 1 <= n <= 45]
                     if len(valid_list) != len(input_list):
-                        print("유효하지 않은 번호가 포함되어 있습니다. (1~45 사이)")
+                        print("   유효하지 않은 번호가 포함되어 있습니다. (1~45 사이)")
                         continue
-                    if len(valid_list) > 6:
-                        print("   [WARN] 고정수는 최대 6개까지만 가능합니다.")
+                    if len(valid_list) > 5:
+                        print("   [WARN] 고정수는 최대 5개까지만 가능합니다.")
                         continue
                     fixed_nums = set(valid_list)
-                    print(f"    고정번호 설정됨: {fixed_nums}")
+                    print(f"    고정번호 설정됨: {sorted(fixed_nums)}")
                     break
                 except ValueError:
-                    print("숫자를 입력해주세요.")
+                    print("   숫자를 입력해주세요.")
 
-        print(f"\n    고정번호: {len(fixed_nums)}개 {list(fixed_nums)}")
+        # 제외번호 설정
+        print(f"\n 제외번호 설정 (절대 포함하지 않을 번호)")
+        if input("   제외수를 설정하시겠습니까? (y/n): ").lower() == 'y':
+            user_input = input("   제외할 번호 입력 (쉼표 구분): ").strip()
+            if user_input:
+                try:
+                    exclude_nums = {int(n.strip()) for n in user_input.split(',') if 1 <= int(n.strip()) <= 45}
+                    exclude_nums -= fixed_nums  # 고정번호와 충돌 방지
+                    print(f"    제외번호 설정됨: {sorted(exclude_nums)}")
+                except ValueError:
+                    print("   숫자를 입력해주세요.")
+
         try:
-            count = int(input("\n추천받을 조합 개수 (1~20): ").strip() or "5")
+            count = int(input("\n 추천받을 조합 개수 (1~20, 기본 5): ").strip() or "5")
             count = max(1, min(20, count))
         except ValueError:
             count = 5
-        recommendations = self.stat_analyzer.generate_recommendations(
-            fixed_numbers=fixed_nums,
+
+        print(f"\n    고정번호: {sorted(fixed_nums) if fixed_nums else '없음'}")
+        print(f"    제외번호: {sorted(exclude_nums) if exclude_nums else '없음'}")
+
+        results = generate_diverse_recommendations(
             num_recommendations=count,
+            exclude_numbers=exclude_nums,
+            fixed_numbers=fixed_nums,
+            max_overlap=2,
         )
-        for i, rec in enumerate(recommendations, 1):
-            print(f"\n[{i}] {rec['numbers']} (점수: {rec['score']:.2f})")
-            save = input("   저장하시겠습니까? (y/n): ").lower()
-            if save == 'y':
-                method_str = "고정 추천"
+
+        if not results:
+            print("\n[WARN] 추천 번호를 생성할 수 없습니다.")
+            return
+
+        print(f"\n{'─' * 60}")
+        print(f" 🎯 추천 결과")
+        print(f"{'─' * 60}")
+
+        for i, rec in enumerate(results, 1):
+            nums_str = "  ".join(f"{n:2d}" for n in rec['numbers'])
+            fixed_mark = ""
+            if fixed_nums:
+                matched = set(rec['numbers']) & fixed_nums
+                fixed_mark = f"  [고정: {sorted(matched)}]" if matched else ""
+            print(f"  [{i}] {nums_str}{fixed_mark}")
+
+        # 저장 옵션
+        save = input("\n 모든 조합을 저장하시겠습니까? (y/n): ").lower()
+        if save == 'y':
+            for rec in results:
+                method = "고급 추천"
                 if fixed_nums:
-                    method_str += f"(고정:{list(fixed_nums)})"
-                self.storage.save_combination(rec['numbers'], method_str)
-                print("    저장되었습니다.")
+                    method += f"(고정:{sorted(fixed_nums)})"
+                self.storage.save_combination(rec['numbers'], method)
+            print(f"    {len(results)}개 조합이 저장되었습니다.")
 
     def manage_saved_combinations(self):
         """5. 저장된 번호 관리"""
