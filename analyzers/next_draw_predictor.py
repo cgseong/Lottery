@@ -18,6 +18,7 @@ from collections import defaultdict, Counter
 from typing import Dict, List, Optional, Set, Tuple
 
 from utils.constants import MAX_LOTTO_NUMBER, NUM_LOTTO_NUMBERS_TO_PICK, LOTTO_NUMBER_COLUMNS
+from utils.helpers import get_last_draw_numbers, exceeds_prev_draw_overlap
 
 try:
     from utils.logging_config import get_logger
@@ -553,6 +554,8 @@ class NextDrawPredictor:
         seen = set()
         max_attempts = num_sets * 500
 
+        prev_draw = get_last_draw_numbers(self.historical_data)
+
         for _ in range(max_attempts):
             if len(results) >= num_sets:
                 break
@@ -565,6 +568,10 @@ class NextDrawPredictor:
             if key in seen:
                 continue
             seen.add(key)
+
+            # 직전 회차 당첨번호 2개 이상 포함 시 제외
+            if exceeds_prev_draw_overlap(nums, prev_draw):
+                continue
 
             # 기본 필터: 합계 범위
             total_sum = sum(nums)

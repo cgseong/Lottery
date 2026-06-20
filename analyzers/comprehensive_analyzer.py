@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from utils.helpers import passes_advanced_filters
+from utils.helpers import passes_advanced_filters, get_last_draw_numbers, exceeds_prev_draw_overlap
 
 # 로또 기본 상수
 _NUM_BALLS = 45
@@ -305,6 +305,7 @@ class ComprehensiveAnalyzer:
 
         p = self._number_sampling_weights(exclude)
         rng = np.random.default_rng(seed=seed)
+        prev_draw = get_last_draw_numbers(self.historical_data)
 
         seen: set = set()
         scored: List[tuple] = []
@@ -315,6 +316,9 @@ class ComprehensiveAnalyzer:
             if key in seen:
                 continue
             seen.add(key)
+            # 직전 회차 당첨번호 2개 이상 포함 시 제외
+            if exceeds_prev_draw_overlap(nums, prev_draw):
+                continue
             # 고급 필터: AC값, 동일 십의자리, 끝수합, 저고비율
             if not passes_advanced_filters(nums):
                 continue

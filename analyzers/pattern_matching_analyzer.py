@@ -10,7 +10,7 @@ from typing import List, Dict, Optional, Set, Tuple, Any
 
 # 상수 import
 from utils.constants import *
-from utils.helpers import check_consecutive_count, normalize_exclude_numbers
+from utils.helpers import check_consecutive_count, normalize_exclude_numbers, get_last_draw_numbers, exceeds_prev_draw_overlap
 from utils.logging_config import get_logger
 
 _log = get_logger(__name__)
@@ -111,6 +111,7 @@ class PatternMatchingAnalyzer:
         """패턴 매칭 기반 추천 번호 생성"""
         exclude_numbers = normalize_exclude_numbers(exclude_numbers)
         _log.info("패턴 매칭 분석기 실행 중")
+        prev_draw = get_last_draw_numbers(self.historical_data)
 
         best_combination = None
         best_score = -1
@@ -119,6 +120,10 @@ class PatternMatchingAnalyzer:
         for attempt in range(1, max_attempts + 1):
             numbers = self.generate_numbers(exclude_numbers)
             if not numbers:
+                continue
+
+            # 직전 회차 당첨번호 2개 이상 포함 시 제외
+            if exceeds_prev_draw_overlap(numbers, prev_draw):
                 continue
 
             score = self.calculate_score(numbers)
