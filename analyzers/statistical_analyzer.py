@@ -6,7 +6,7 @@ import random
 from collections import Counter
 from typing import List, Dict, Optional, Set, Tuple
 
-from utils.helpers import check_consecutive_count, passes_advanced_filters
+from utils.helpers import check_consecutive_count, passes_advanced_filters, get_last_draw_numbers, exceeds_prev_draw_overlap
 from utils.logging_config import get_logger
 
 _log = get_logger(__name__)
@@ -486,6 +486,7 @@ class StatisticalAnalyzer:
         attempts = 0
         max_attempts = num_recommendations * 400
         candidate_limit = num_recommendations * 25
+        prev_draw = get_last_draw_numbers(self.historical_data)
 
         while len(recommendations) < num_recommendations and attempts < max_attempts:
             attempts += 1
@@ -494,6 +495,10 @@ class StatisticalAnalyzer:
             numbers = self._generate_statistical_numbers(exclude_numbers, fixed_numbers)
 
             if not numbers:
+                continue
+
+            # 직전 회차 당첨번호 2개 이상 포함 시 제외
+            if exceeds_prev_draw_overlap(numbers, prev_draw):
                 continue
 
             # 중복 검사
@@ -581,6 +586,10 @@ class StatisticalAnalyzer:
                 continue
 
             if not self._passes_distribution_filters(selected_nums):
+                continue
+
+            # 직전 회차 당첨번호 2개 이상 포함 시 제외
+            if exceeds_prev_draw_overlap(selected_nums, get_last_draw_numbers(self.historical_data)):
                 continue
 
             combo_tuple = tuple(selected_nums)

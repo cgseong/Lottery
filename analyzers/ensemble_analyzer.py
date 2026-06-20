@@ -9,7 +9,7 @@ from typing import List, Dict, Optional, Set, Tuple, Any
 
 # 상수 import
 from utils.constants import *
-from utils.helpers import check_consecutive_count, normalize_exclude_numbers
+from utils.helpers import check_consecutive_count, normalize_exclude_numbers, get_last_draw_numbers, exceeds_prev_draw_overlap
 from utils.logging_config import get_logger
 
 # 다른 분석기 import
@@ -35,6 +35,7 @@ class EnsembleAnalyzer:
         """앙상블 방식으로 추천 번호 생성"""
         exclude_numbers = normalize_exclude_numbers(exclude_numbers)
         _log.info("앙상블 분석기 실행 중 (통계/패턴/트렌드)")
+        prev_draw = get_last_draw_numbers(self.statistical_analyzer.historical_data)
 
         recommendations = []
         attempts = 0
@@ -46,6 +47,10 @@ class EnsembleAnalyzer:
             # 각 분석기에서 번호 생성
             numbers = self.generate_numbers(exclude_numbers)
             if not numbers:
+                continue
+
+            # 직전 회차 당첨번호 2개 이상 포함 시 제외
+            if exceeds_prev_draw_overlap(numbers, prev_draw):
                 continue
 
             # 각 분석기의 점수 계산

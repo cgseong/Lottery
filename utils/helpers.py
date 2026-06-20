@@ -367,6 +367,52 @@ def check_low_high_ratio(numbers: List[int], max_imbalance: int = 4) -> bool:
     return low_count <= max_imbalance and high_count <= max_imbalance
 
 
+def get_last_draw_numbers(historical_data: List[Dict]) -> Set[int]:
+    """역사 데이터에서 직전(최신) 회차의 당첨번호를 반환합니다.
+
+    Args:
+        historical_data: CSV에서 로드한 당첨번호 dict 리스트
+
+    Returns:
+        직전 회차 당첨번호 집합 (6개) 또는 빈 집합
+    """
+    if not historical_data:
+        return set()
+
+    # round 기준으로 최신 회차 찾기
+    latest = max(historical_data, key=lambda x: int(x.get('round', 0) or 0))
+    nums = set()
+    for i in range(1, 7):
+        try:
+            n = int(latest.get(f'num{i}', 0))
+            if 1 <= n <= MAX_LOTTO_NUMBER:
+                nums.add(n)
+        except (ValueError, TypeError):
+            continue
+    return nums
+
+
+def exceeds_prev_draw_overlap(numbers: List[int], prev_numbers: Set[int],
+                               max_overlap: int = 1) -> bool:
+    """조합이 직전 회차 당첨번호와 max_overlap개 초과로 겹치는지 확인합니다.
+
+    직전 회차 번호가 2개 이상 포함된 조합을 제외하려면 max_overlap=1로 호출합니다.
+
+    Args:
+        numbers: 검사할 번호 조합
+        prev_numbers: 직전 회차 당첨번호 집합
+        max_overlap: 허용 최대 겹침 수 (기본 1 → 2개 이상이면 True 반환)
+
+    Returns:
+        True: 겹침 초과 (제외 대상)
+        False: 허용 범위 (통과)
+    """
+    if not prev_numbers:
+        return False
+    overlap = len(set(numbers) & prev_numbers)
+    return overlap > max_overlap
+
+
 def passes_advanced_filters(
     numbers: List[int],
     min_ac: int = 7,

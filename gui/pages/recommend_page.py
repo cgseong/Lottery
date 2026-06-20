@@ -15,10 +15,11 @@ class RecommendWorker(QThread):
     """추천 번호 생성을 백그라운드에서 수행"""
     finished = Signal(list)
 
-    def __init__(self, count, mode="diversity"):
+    def __init__(self, count, mode="diversity", historical_data=None):
         super().__init__()
         self.count = count
         self.mode = mode
+        self.historical_data = historical_data
 
     def run(self):
         try:
@@ -26,12 +27,17 @@ class RecommendWorker(QThread):
                 generate_diverse_recommendations,
                 generate_coverage_sets,
             )
+            from utils.helpers import get_last_draw_numbers
+
+            last_draw = get_last_draw_numbers(self.historical_data) if self.historical_data else None
+
             if self.mode == "coverage":
-                results = generate_coverage_sets(num_sets=self.count)
+                results = generate_coverage_sets(
+                    num_sets=self.count, last_draw_numbers=last_draw)
             else:
                 results = generate_diverse_recommendations(
-                    num_recommendations=self.count, max_overlap=2
-                )
+                    num_recommendations=self.count, max_overlap=2,
+                    last_draw_numbers=last_draw)
             self.finished.emit(results or [])
         except Exception:
             self.finished.emit([])
@@ -130,7 +136,7 @@ class RecommendPage(BasePage):
         self.recommend_btn.setText("생성 중...")
 
         count = self.count_spin.value()
-        self.worker = RecommendWorker(count, mode="diversity")
+        self.worker = RecommendWorker(count, mode="diversity", historical_data=self.historical_data)
         self.worker.finished.connect(self._on_results)
         self.worker.start()
 

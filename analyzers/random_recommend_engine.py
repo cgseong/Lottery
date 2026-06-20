@@ -12,7 +12,7 @@
 import random
 from typing import List, Dict, Optional, Set
 
-from utils.helpers import check_consecutive_count
+from utils.helpers import check_consecutive_count, get_last_draw_numbers, exceeds_prev_draw_overlap
 
 
 # 상수
@@ -85,6 +85,7 @@ def generate_diverse_recommendations(
     fixed_numbers: Optional[Set[int]] = None,
     max_overlap: int = 2,
     seed: Optional[int] = None,
+    last_draw_numbers: Optional[Set[int]] = None,
 ) -> List[Dict]:
     """랜덤 기반 + 약한 필터 + 다양성 확보 번호 추천.
 
@@ -94,6 +95,7 @@ def generate_diverse_recommendations(
         fixed_numbers: 반드시 포함할 번호 집합 (최대 5개)
         max_overlap: 조합 간 허용 최대 겹침 번호 수 (기본 2)
         seed: 난수 시드 (None이면 매번 다른 결과)
+        last_draw_numbers: 직전 회차 당첨번호 집합 (2개 이상 겹침 제외)
 
     Returns:
         [{'numbers': [...], 'diversity_score': float}, ...]
@@ -128,6 +130,10 @@ def generate_diverse_recommendations(
 
         # 약한 필터 적용
         if not _passes_soft_filter(combo):
+            continue
+
+        # 직전 회차 당첨번호 2개 이상 포함 시 제외
+        if last_draw_numbers and exceeds_prev_draw_overlap(combo, last_draw_numbers):
             continue
 
         # 다양성 검증: 기존 조합과 최대 max_overlap개까지만 겹침 허용
@@ -168,6 +174,7 @@ def generate_coverage_sets(
     num_sets: int = 5,
     exclude_numbers: Optional[Set[int]] = None,
     seed: Optional[int] = None,
+    last_draw_numbers: Optional[Set[int]] = None,
 ) -> List[Dict]:
     """번호 커버리지를 극대화하는 조합 세트 생성.
 
@@ -219,6 +226,10 @@ def generate_coverage_sets(
                 combo = sorted(random.sample(all_available, _PICK))
 
             if not _passes_soft_filter(combo):
+                continue
+
+            # 직전 회차 당첨번호 2개 이상 포함 시 제외
+            if last_draw_numbers and exceeds_prev_draw_overlap(combo, last_draw_numbers):
                 continue
 
             # 새로 커버하는 번호 수

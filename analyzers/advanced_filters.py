@@ -153,11 +153,11 @@ class HistoricalPatternFilter:
         return 1 <= prime_count <= 4
 
     def check_prev_overlap(self, numbers: List[int]) -> bool:
-        """직전 회차와 4개 이상 겹치면 배제합니다."""
+        """직전 회차와 2개 이상 겹치면 배제합니다."""
         if not self._prev_numbers:
             return True
         overlap = len(set(numbers) & self._prev_numbers)
-        return overlap <= 3
+        return overlap <= 1
 
 
     def passes_all(self, numbers: List[int]) -> bool:
