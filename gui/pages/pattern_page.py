@@ -217,6 +217,73 @@ class PatternPage(BasePage):
         self.balls_layout.addStretch()
         content_layout.addWidget(self.balls_group)
 
+        # ─── 다음 회차 예상 번호 + 패턴 시각화 ───
+        predict_group = QGroupBox("🔮 다음 회차 예상 (패턴 유형 기반 추천)")
+        predict_group.setStyleSheet(self._group_style())
+        predict_layout = QVBoxLayout(predict_group)
+
+        # 예상 실행 버튼
+        btn_row = QHBoxLayout()
+        self.predict_btn = QPushButton("🔮 예상 번호 생성")
+        self.predict_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #8e44ad; color: white;
+                border: none; padding: 10px 24px;
+                border-radius: 5px; font-size: 13px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #9b59b6; }
+            QPushButton:pressed { background-color: #7d3c98; }
+        """)
+        self.predict_btn.clicked.connect(self._generate_prediction)
+        btn_row.addWidget(self.predict_btn)
+        btn_row.addStretch()
+        self.predict_info_label = QLabel("")
+        self.predict_info_label.setStyleSheet(
+            "font-size: 12px; color: #8e44ad; font-weight: bold;")
+        btn_row.addWidget(self.predict_info_label)
+        predict_layout.addLayout(btn_row)
+
+        # 예상 결과: 좌=패턴 그리드, 우=번호 목록
+        self.predict_content_layout = QHBoxLayout()
+        self.predict_content_layout.setSpacing(12)
+
+        # 예상 패턴 시각화 위젯
+        pred_pattern_frame = QFrame()
+        pred_pattern_frame.setStyleSheet("""
+            QFrame {
+                background-color: #faf5ff;
+                border: 1px solid #d4c5f9;
+                border-radius: 8px;
+            }
+        """)
+        pred_pattern_inner = QVBoxLayout(pred_pattern_frame)
+        pred_pattern_inner.setContentsMargins(8, 8, 8, 8)
+        self.predict_pattern_widget = NumberPatternWidget()
+        self.predict_pattern_widget.setMinimumSize(350, 440)
+        pred_pattern_inner.addWidget(self.predict_pattern_widget)
+        self.predict_content_layout.addWidget(pred_pattern_frame, stretch=3)
+
+        # 우측: 예상 번호 리스트
+        self.predict_list_frame = QFrame()
+        self.predict_list_frame.setStyleSheet("""
+            QFrame {
+                background-color: #faf5ff;
+                border: 1px solid #d4c5f9;
+                border-radius: 8px;
+            }
+        """)
+        self.predict_list_layout = QVBoxLayout(self.predict_list_frame)
+        self.predict_list_layout.setContentsMargins(10, 10, 10, 10)
+        self.predict_list_layout.setSpacing(8)
+        self.predict_list_layout.addWidget(
+            QLabel("예상 번호 생성 버튼을 클릭하세요."))
+        self.predict_list_layout.addStretch()
+        self.predict_content_layout.addWidget(
+            self.predict_list_frame, stretch=2)
+
+        predict_layout.addLayout(self.predict_content_layout)
+        content_layout.addWidget(predict_group)
+
         content_layout.addStretch()
         scroll.setWidget(content)
         layout.addWidget(scroll)
@@ -401,9 +468,104 @@ class PatternPage(BasePage):
             self.stats_recent_label.setText(f"최근 흐름: {recent_str}")
 
 
+    # ─── 예상 번호 생성 ─────────────────────────────────────────────
+
+    def _generate_prediction(self):
+        """다음 예상 유형에 맞춰 번호를 추천하고 패턴을 시각화합니다."""
+        if not self._analyzer:
+            self.predict_info_label.setText("분석기가 초기화되지 않았습니다.")
+            return
+
+        try:
+            predictions = self._analyzer.predict_next_numbers(num_sets=5)
+        except Exception as e:
+            self.predict_info_label.setText(f"오류: {e}")
+            return
+
+        if not predictions:
+            self.predict_info_label.setText("예상 번호를 생성할 수 없습니다.")
+            return
+
+        # 예상 유형 정보
+        stats = self._analyzer.get_pattern_type_statistics()
+        next_type = stats.get('next_likely_type', '—')
+        next_round = self._max_round + 1
+        self.predict_info_label.setText(
+            f"{next_round}회 예상 유형: {next_type}")
+
+        # 첫 번째 예측으로 패턴 위젯 업데이트
+        first = predictions[0]
+        self.predict_pattern_widget.set_numbers(
+            first['numbers'], round_number=next_round)
+
+        # 우측 리스트 업데이트
+        self._display_predictions(predictions, next_round)
+
+    def _display_predictions(self, predictions: list, next_round: int):
+        """예상 번호 리스트를 표시합니다."""
+        # 기존 위젯 제거
+        while self.predict_list_layout.count():
+            item = self.predict_list_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        header = QLabel(f"<b>{next_round}회 예상 번호</b>")
+        header.setStyleSheet("font-size: 13px; color: #2c3e50;")
+        self.predict_list_layout.addWidget(header)
+
+        for i, pred in enumerate(predictions, 1):
+            card = QFrame()
+            card.setStyleSheet("""
+                QFrame {
+                    background-color: white;
+                    border: 1px solid #e0d4f5;
+                    border-radius: 6px;
+                    padding: 8px;
+                    margin: 2px 0;
+                }
+            """)
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(6, 4, 6, 4)
+            card_layout.setSpacing(4)
+
+            # 번호 + 유형
+            top_row = QHBoxLayout()
+            rank_lbl = QLabel(f"<b>#{i}</b>")
+            rank_lbl.setStyleSheet("font-size: 12px;")
+            top_row.addWidget(rank_lbl)
+
+            type_lbl = QLabel(pred.get('pattern_type', '—'))
+            match_color = '#27ae60' if pred.get('type_match') else '#e67e22'
+            type_lbl.setStyleSheet(
+                f"font-size: 11px; color: {match_color}; font-weight: bold;")
+            top_row.addWidget(type_lbl)
+            top_row.addStretch()
+            card_layout.addLayout(top_row)
+
+            # 번호 공
+            balls_row = QHBoxLayout()
+            balls_row.setSpacing(4)
+            for num in pred.get('numbers', []):
+                ball = NumberBallWidget(int(num), size=32)
+                balls_row.addWidget(ball)
+            balls_row.addStretch()
+            card_layout.addLayout(balls_row)
+
+            # 클릭 시 패턴 위젯 업데이트
+            nums = pred.get('numbers', [])
+            card.mousePressEvent = (
+                lambda event, n=nums, r=next_round:
+                    self.predict_pattern_widget.set_numbers(n, r))
+            card.setCursor(Qt.CursorShape.PointingHandCursor)
+
+            self.predict_list_layout.addWidget(card)
+
+        self.predict_list_layout.addStretch()
+
     # ─── 네비게이션 ───────────────────────────────────────────────
 
     def _find_round(self, round_no: int):
+
         for row in self._all_rows:
             try:
                 if int(row.get('round', 0)) == round_no:
