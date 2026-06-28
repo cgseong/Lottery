@@ -217,6 +217,73 @@ class PatternPage(BasePage):
         self.balls_layout.addStretch()
         content_layout.addWidget(self.balls_group)
 
+        # ─── 다음 회차 예상 번호 + 패턴 시각화 ───
+        predict_group = QGroupBox("🔮 다음 회차 예상 (패턴 유형 기반 추천)")
+        predict_group.setStyleSheet(self._group_style())
+        predict_layout = QVBoxLayout(predict_group)
+
+        # 예상 실행 버튼
+        btn_row = QHBoxLayout()
+        self.predict_btn = QPushButton("🔮 예상 번호 생성")
+        self.predict_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #8e44ad; color: white;
+                border: none; padding: 10px 24px;
+                border-radius: 5px; font-size: 13px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #9b59b6; }
+            QPushButton:pressed { background-color: #7d3c98; }
+        """)
+        self.predict_btn.clicked.connect(self._generate_prediction)
+        btn_row.addWidget(self.predict_btn)
+        btn_row.addStretch()
+        self.predict_info_label = QLabel("")
+        self.predict_info_label.setStyleSheet(
+            "font-size: 12px; color: #8e44ad; font-weight: bold;")
+        btn_row.addWidget(self.predict_info_label)
+        predict_layout.addLayout(btn_row)
+
+        # 예상 결과: 좌=패턴 그리드, 우=번호 목록
+        self.predict_content_layout = QHBoxLayout()
+        self.predict_content_layout.setSpacing(12)
+
+        # 예상 패턴 시각화 위젯
+        pred_pattern_frame = QFrame()
+        pred_pattern_frame.setStyleSheet("""
+            QFrame {
+                background-color: #faf5ff;
+                border: 1px solid #d4c5f9;
+                border-radius: 8px;
+            }
+        """)
+        pred_pattern_inner = QVBoxLayout(pred_pattern_frame)
+        pred_pattern_inner.setContentsMargins(8, 8, 8, 8)
+        self.predict_pattern_widget = NumberPatternWidget()
+        self.predict_pattern_widget.setMinimumSize(350, 440)
+        pred_pattern_inner.addWidget(self.predict_pattern_widget)
+        self.predict_content_layout.addWidget(pred_pattern_frame, stretch=3)
+
+        # 우측: 예상 번호 리스트
+        self.predict_list_frame = QFrame()
+        self.predict_list_frame.setStyleSheet("""
+            QFrame {
+                background-color: #faf5ff;
+                border: 1px solid #d4c5f9;
+                border-radius: 8px;
+            }
+        """)
+        self.predict_list_layout = QVBoxLayout(self.predict_list_frame)
+        self.predict_list_layout.setContentsMargins(10, 10, 10, 10)
+        self.predict_list_layout.setSpacing(8)
+        self.predict_list_layout.addWidget(
+            QLabel("예상 번호 생성 버튼을 클릭하세요."))
+        self.predict_list_layout.addStretch()
+        self.predict_content_layout.addWidget(
+            self.predict_list_frame, stretch=2)
+
+        predict_layout.addLayout(self.predict_content_layout)
+        content_layout.addWidget(predict_group)
+
         content_layout.addStretch()
         scroll.setWidget(content)
         layout.addWidget(scroll)
@@ -404,6 +471,7 @@ class PatternPage(BasePage):
     # ─── 네비게이션 ───────────────────────────────────────────────
 
     def _find_round(self, round_no: int):
+
         for row in self._all_rows:
             try:
                 if int(row.get('round', 0)) == round_no:

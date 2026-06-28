@@ -636,3 +636,103 @@ class PatternStructureAnalyzer:
             'centroid_trend': self.get_centroid_trend(10),
             'pattern_statistics': self.get_pattern_type_statistics(),
         }
+
+    def predict_next_numbers(self, num_sets: int = 5,
+                             exclude_numbers: Optional[set] = None
+                             ) -> List[Dict]:
+        """다음 예상 유형에 맞춰 번호를 추천하고 구조 분석 결과를 포함합니다.
+
+        구역 선호도 점수 기반으로 번호를 샘플링하되,
+        생성된 조합이 예상 패턴 유형에 부합하는지 검증합니다.
+
+        Returns:
+            [{'numbers': [...], 'pattern_type': str, 'score': float,
+              'features': {...}, 'confidence': float}, ...]
+        """
+        self.analyze()
+
+        if not self._draws:
+            return []
+
+        exclude = exclude_numbers or set()
+        scores = self.get_region_preference_scores(30)
+
+        # 제외 번호 처리
+        for n in exclude:
+            if 1 <= n <= MAX_LOTTO_NUMBER:
+                scores[n - 1] = 0.0
+
+        # 직전 회차 번호 2개 이상 겹침 제외를 위해
+        last_draw = set(self._draws[-1]) if self._draws else set()
+
+        # 예상 유형
+        stats = self.get_pattern_type_statistics()
+        target_type = stats.get('next_likely_key', 'balanced')
+        target_type_name = PATTERN_TYPES.get(target_type, target_type)
+
+        # 정규화
+        total = scores.sum()
+        if total <= 0:
+            return []
+        probs = scores / total
+
+        rng = np.random.default_rng()
+        results = []
+        seen = set()
+        max_attempts = num_sets * 3000
+
+        for _ in range(max_attempts):
+            if len(results) >= num_sets:
+                break
+
+            chosen = rng.choice(MAX_LOTTO_NUMBER, size=6, replace=False, p=probs)
+            nums = sorted((chosen + 1).tolist())
+            key = tuple(nums)
+
+            if key in seen:
+                continue
+            seen.add(key)
+
+            # 직전 회차와 2개 이상 겹침 제외
+            if len(set(nums) & last_draw) >= 2:
+                continue
+
+            # 합계 범위 필터
+            total_sum = sum(nums)
+            if not (100 <= total_sum <= 180):
+                continue
+
+            # 패턴 유형 분류
+            pattern = classify_pattern(nums)
+            features = compute_structural_features(nums)
+
+            # 예상 유형과 일치하거나 점수가 높은 조합 우선
+            type_match = 1.0 if pattern['type'] == target_type else 0.3
+            region_score = sum(scores[n - 1] for n in nums)
+            combo_score = type_match * 0.6 + region_score * 0.4
+
+            results.append({
+                'numbers': nums,
+                'pattern_type': pattern['type_name'],
+                'pattern_key': pattern['type'],
+                'score': round(float(combo_score), 4),
+                'confidence': pattern['confidence'],
+                'features': features,
+                'type_match': pattern['type'] == target_type,
+            })
+
+        # 점수 내림차순 정렬 (유형 일치 우선)
+        results.sort(key=lambda x: (x['type_match'], x['score']), reverse=True)
+
+        # 다양성 필터: 너무 비슷한 조합 제거
+        filtered = []
+        for r in results:
+            if len(filtered) >= num_sets:
+                break
+            ns = set(r['numbers'])
+            if all(len(ns & set(f['numbers'])) <= 3 for f in filtered):
+                filtered.append(r)
+
+        _log.info("패턴 기반 추천 완료: %d개 조합 (예상 유형: %s)",
+                  len(filtered), target_type_name)
+        return filtered
