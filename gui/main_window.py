@@ -19,6 +19,7 @@ from gui.pages.ai_page import AIPage
 from gui.pages.comprehensive_page import ComprehensivePage
 from gui.pages.integrated_page import IntegratedPage
 from gui.pages.prediction_page import PredictionPage
+from gui.pages.pattern_page import PatternPage
 from gui.pages.history_page import HistoryPage
 
 # CSV 파일명 상수
@@ -151,6 +152,7 @@ class MainWindow(QMainWindow):
             ("comprehensive", ComprehensivePage),
             ("integrated", IntegratedPage),
             ("prediction", PredictionPage),
+            ("pattern", PatternPage),
             ("history", HistoryPage),
         ]
         for name, PageClass in page_classes:
@@ -234,6 +236,7 @@ class MainWindow(QMainWindow):
             "📈 종합 분석 (10지표)",
             "🧬 통합 AI 추천",
             "🔮 다음회차 패턴예측",
+            "🔗 번호 패턴 시각화",
             "📋 회차 정보",
         ]
 
